@@ -1,9 +1,10 @@
-import os
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine, text
+
+from routers import auth
 
 load_dotenv()
 
@@ -14,19 +15,28 @@ app.add_middleware(
     allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    _request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    messages = []
+    for error in exc.errors():
+        field = error["loc"][-1] if error["loc"] else "field"
+        msg = error["msg"].replace("Value error, ", "")
+        messages.append(f"{field}: {msg}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": messages},
+    )
 
 
-@app.get("/health-db")
-def health_db():
-    if not DATABASE_URL:
-        return JSONResponse(status_code=500, content={"status": "error", "detail": "DATABASE_URL is not set"})
-    try:
-        engine = create_engine(DATABASE_URL)
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return JSONResponse(status_code=200, content={"status": "DB connected successfully"})
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"status": "error", "detail": str(exc)})
+app.include_router(auth.router)
+
+
+@app.get("/health")
+def health() -> JSONResponse:
+    return JSONResponse(status_code=200, content={"status": "ok"})
