@@ -10,3 +10,6 @@ dist/
 
 # Plans
 plans/
+
+# Claude
+.claude/
