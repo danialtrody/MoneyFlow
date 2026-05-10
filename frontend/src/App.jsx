@@ -1,19 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 
 function App() {
-  const [status, setStatus] = useState('Checking...')
+  const [page, setPage] = useState('login')
+  const [authed, setAuthed] = useState(false)
 
-  useEffect(() => {
-    fetch('http://localhost:8000/health-db')
-      .then(res => res.json())
-      .then(data => setStatus(data.status))
-      .catch(() => setStatus('Could not reach backend'))
-  }, [])
+  if (authed) {
+    return (
+      <div className="min-h-screen bg-[#020817] flex items-center justify-center">
+        <p className="text-slate-400 text-sm">Dashboard coming soon.</p>
+      </div>
+    )
+  }
+
+  if (page === 'register') {
+    return <RegisterPage onNavigateToLogin={() => setPage('login')} />
+  }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <p>{status}</p>
-    </div>
+    <LoginPage
+      onNavigateToRegister={() => setPage('register')}
+      onLoginSuccess={() => setAuthed(true)}
+    />
   )
 }
 
