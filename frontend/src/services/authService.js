@@ -1,15 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { handleResponse } from './apiUtils'
 
-async function handleResponse(response) {
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const detail = Array.isArray(data.detail)
-      ? data.detail.map((e) => (typeof e === 'object' ? e.msg : e)).join(' ')
-      : data.detail || 'Something went wrong.'
-    throw new Error(detail)
-  }
-  return data
-}
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 export async function login(email, password) {
   const response = await fetch(`${BASE_URL}/auth/login`, {
@@ -17,6 +8,14 @@ export async function login(email, password) {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ email, password }),
+  })
+  return handleResponse(response)
+}
+
+export async function logout() {
+  const response = await fetch(`${BASE_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
   })
   return handleResponse(response)
 }

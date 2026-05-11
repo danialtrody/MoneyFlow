@@ -22,9 +22,9 @@ export default function LoginPage({ onNavigateToRegister, onLoginSuccess }) {
     }
     setIsLoading(true)
     try {
-      await login(email, password)
+      const userData = await login(email, password)
       addToast('success', 'Welcome back! You are now signed in.')
-      setTimeout(() => onLoginSuccess(), 1200)
+      setTimeout(() => onLoginSuccess(userData), 1200)
     } catch (err) {
       addToast('error', err.message || 'Invalid email or password.')
     } finally {
@@ -102,6 +102,7 @@ export default function LoginPage({ onNavigateToRegister, onLoginSuccess }) {
                 </label>
                 <button
                   type="button"
+                  onClick={() => addToast('error', 'Password reset is not yet available.')}
                   className="text-[12px] text-blue-400 hover:text-blue-300 transition-colors duration-150"
                 >
                   Forgot password?

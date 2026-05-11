@@ -28,12 +28,12 @@ def register(
     return UserResponse.model_validate(user)
 
 
-@router.post("/login", response_model=dict[str, str])
+@router.post("/login", response_model=UserResponse)
 def login(
     data: LoginRequest,
     response: Response,
     db: Session = Depends(get_db),
-) -> dict[str, str]:
+) -> UserResponse:
     try:
         user = user_service.authenticate(db, data.email, data.password)
     except ValueError as e:
@@ -50,7 +50,7 @@ def login(
         samesite="lax",
         secure=_COOKIE_SECURE,
     )
-    return {"message": "login successful"}
+    return UserResponse.model_validate(user)
 
 
 @router.post("/logout", response_model=dict[str, str])
