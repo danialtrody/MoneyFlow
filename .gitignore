@@ -11,6 +11,9 @@ dist/
 # Plans
 .plans/
 
+# VSCode
+.vscode/
+
 # Claude
 .claude/
 CLAUDE.md
