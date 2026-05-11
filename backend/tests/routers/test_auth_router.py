@@ -86,7 +86,11 @@ def test_login_success_returns_200_and_sets_httponly_cookie(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"message": "login successful"}
+    data = response.json()
+    assert data["email"] == _VALID_USER["email"]
+    assert data["full_name"] == _VALID_USER["full_name"]
+    assert "id" in data
+    assert "created_at" in data
     assert "access_token" in response.cookies
 
 
@@ -133,3 +137,13 @@ def test_logout_without_prior_login_returns_200(client: TestClient) -> None:
     response = client.post(_LOGOUT)
 
     assert response.status_code == 200
+
+
+def test_logout_blocks_subsequent_protected_requests(client: TestClient) -> None:
+    client.post(_REGISTER, json=_VALID_USER)
+    client.post(_LOGIN, json={"email": _VALID_USER["email"], "password": _VALID_USER["password"]})
+    assert client.get("/accounts").status_code == 200
+
+    client.post(_LOGOUT)
+
+    assert client.get("/accounts").status_code == 401

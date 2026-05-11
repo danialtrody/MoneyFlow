@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from routers import auth
+from routers import accounts, auth
 
 load_dotenv()
 
@@ -35,6 +35,7 @@ async def validation_exception_handler(
 
 
 app.include_router(auth.router)
+app.include_router(accounts.router)
 
 
 @app.get("/health")
