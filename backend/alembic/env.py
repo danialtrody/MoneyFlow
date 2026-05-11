@@ -12,7 +12,7 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import Base  # noqa: E402
-from models import account, user  # noqa: E402, F401
+from models import account, transaction, user  # noqa: E402, F401
 
 config = context.config
 
