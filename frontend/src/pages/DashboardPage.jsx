@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { CloseIcon, TrendUpIcon } from '../components/Icons'
+import { CloseIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts } from '../services/accountService'
 import { logout } from '../services/authService'
+import {
+  createTransaction,
+  deleteTransaction,
+  getTransactions,
+} from '../services/transactionService'
 
 const TYPE_LABELS = {
   bank: 'Bank',
@@ -29,16 +34,30 @@ const TYPE_BADGE = {
 const inputClass =
   'w-full bg-white/4 border border-white/8 rounded-xl px-4 py-3 text-white text-[14px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/[0.07]'
 
-const EMPTY_FORM = { name: '', type: 'bank', balance: '0.00', currency: 'USD' }
+const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 'USD' }
+
+const today = () => new Date().toISOString().split('T')[0]
+const emptyTxForm = () => ({ type: 'income', amount: '', category: '', description: '', date: today() })
 
 export default function DashboardPage({ user, onLogout }) {
   const [accounts, setAccounts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(EMPTY_ACCOUNT_FORM)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
   const pendingDeleteTimerRef = useRef(null)
+
+  const [selectedAccountId, setSelectedAccountId] = useState(null)
+  const [transactions, setTransactions] = useState([])
+  const [loadingTx, setLoadingTx] = useState(false)
+  const [showAddTx, setShowAddTx] = useState(false)
+  const [txForm, setTxForm] = useState(emptyTxForm)
+  const [isSubmittingTx, setIsSubmittingTx] = useState(false)
+  const [pendingDeleteTxId, setPendingDeleteTxId] = useState(null)
+  const pendingDeleteTxTimerRef = useRef(null)
+  const selectedAccountIdRef = useRef(null)
+
   const { toasts, addToast, removeToast } = useToast()
 
   useEffect(() => {
@@ -49,8 +68,29 @@ export default function DashboardPage({ user, onLogout }) {
   }, [addToast])
 
   useEffect(() => {
-    return () => clearTimeout(pendingDeleteTimerRef.current)
+    return () => {
+      clearTimeout(pendingDeleteTimerRef.current)
+      clearTimeout(pendingDeleteTxTimerRef.current)
+    }
   }, [])
+
+  useEffect(() => {
+    selectedAccountIdRef.current = selectedAccountId
+  }, [selectedAccountId])
+
+  useEffect(() => {
+    if (selectedAccountId === null) {
+      setTransactions([])
+      return
+    }
+    setLoadingTx(true)
+    getTransactions(selectedAccountId)
+      .then(setTransactions)
+      .catch(() => addToast('error', 'Failed to load transactions.'))
+      .finally(() => setLoadingTx(false))
+  }, [selectedAccountId, addToast])
+
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
 
   async function handleLogout() {
     await logout().catch(() => {})
@@ -85,7 +125,7 @@ export default function DashboardPage({ user, onLogout }) {
         currency: form.currency.trim() || 'USD',
       })
       setAccounts((prev) => [...prev, account])
-      setForm(EMPTY_FORM)
+      setForm(EMPTY_ACCOUNT_FORM)
       setShowForm(false)
       addToast('success', `"${account.name}" added.`)
     } catch (err) {
@@ -104,12 +144,91 @@ export default function DashboardPage({ user, onLogout }) {
     }
     clearTimeout(pendingDeleteTimerRef.current)
     setPendingDeleteId(null)
+    if (selectedAccountId === account.id) {
+      setSelectedAccountId(null)
+    }
     try {
       await deleteAccount(account.id)
       setAccounts((prev) => prev.filter((a) => a.id !== account.id))
       addToast('success', `"${account.name}" deleted.`)
     } catch (err) {
       addToast('error', err.message || 'Failed to delete account.')
+    }
+  }
+
+  function handleSelectAccount(account) {
+    setSelectedAccountId((prev) => (prev === account.id ? null : account.id))
+    setShowAddTx(false)
+    setTxForm(emptyTxForm())
+    setPendingDeleteTxId(null)
+  }
+
+  function handleTxFormChange(e) {
+    setTxForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  async function handleAddTransaction(e) {
+    e.preventDefault()
+    if (!txForm.category.trim()) {
+      addToast('error', 'Category is required.')
+      return
+    }
+    if (!txForm.amount || parseFloat(txForm.amount) <= 0) {
+      addToast('error', 'Amount must be greater than 0.')
+      return
+    }
+    const accountId = selectedAccountId
+    setIsSubmittingTx(true)
+    try {
+      await createTransaction({
+        account_id: accountId,
+        type: txForm.type,
+        amount: parseFloat(txForm.amount),
+        category: txForm.category.trim(),
+        description: txForm.description.trim() || null,
+        date: txForm.date || today(),
+      })
+      const [updatedAccounts, updatedTxs] = await Promise.all([
+        getAccounts(),
+        getTransactions(accountId),
+      ])
+      setAccounts(updatedAccounts)
+      if (selectedAccountIdRef.current === accountId) {
+        setTransactions(updatedTxs)
+      }
+      setTxForm(emptyTxForm())
+      setShowAddTx(false)
+      addToast('success', 'Transaction added.')
+    } catch (err) {
+      addToast('error', err.message || 'Failed to add transaction.')
+    } finally {
+      setIsSubmittingTx(false)
+    }
+  }
+
+  async function handleDeleteTransaction(tx) {
+    if (pendingDeleteTxId !== tx.id) {
+      setPendingDeleteTxId(tx.id)
+      clearTimeout(pendingDeleteTxTimerRef.current)
+      pendingDeleteTxTimerRef.current = setTimeout(() => setPendingDeleteTxId(null), 3000)
+      return
+    }
+    clearTimeout(pendingDeleteTxTimerRef.current)
+    setPendingDeleteTxId(null)
+    const accountId = selectedAccountId
+    try {
+      await deleteTransaction(tx.id)
+      const [updatedAccounts, updatedTxs] = await Promise.all([
+        getAccounts(),
+        getTransactions(accountId),
+      ])
+      setAccounts(updatedAccounts)
+      if (selectedAccountIdRef.current === accountId) {
+        setTransactions(updatedTxs)
+      }
+      addToast('success', 'Transaction deleted.')
+    } catch (err) {
+      addToast('error', err.message || 'Failed to delete transaction.')
     }
   }
 
@@ -259,7 +378,13 @@ export default function DashboardPage({ user, onLogout }) {
             {accounts.map((account) => (
               <div
                 key={account.id}
-                className={`relative bg-linear-to-br ${TYPE_COLORS[account.type] ?? 'from-slate-500/20 to-slate-600/10 border-slate-500/20'} border rounded-2xl p-5 backdrop-blur-sm`}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectAccount(account)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectAccount(account) } }}
+                className={`relative bg-linear-to-br ${TYPE_COLORS[account.type] ?? 'from-slate-500/20 to-slate-600/10 border-slate-500/20'} border rounded-2xl p-5 backdrop-blur-sm cursor-pointer transition-all duration-200 hover:scale-[1.01] ${
+                  selectedAccountId === account.id ? 'ring-2 ring-blue-500/50' : ''
+                }`}
                 style={{ animation: 'fadeInUp 0.4s cubic-bezier(0.22,1,0.36,1) both' }}
               >
                 <div className="flex items-start justify-between mb-4">
@@ -268,7 +393,7 @@ export default function DashboardPage({ user, onLogout }) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleDelete(account)}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(account) }}
                     aria-label={pendingDeleteId === account.id ? 'Confirm delete' : 'Delete account'}
                     className={`transition-colors duration-150 -mt-0.5 ${
                       pendingDeleteId === account.id
@@ -289,6 +414,161 @@ export default function DashboardPage({ user, onLogout }) {
                 </p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Transactions panel */}
+        {selectedAccount && (
+          <div
+            className="mt-8 bg-white/[0.02] border border-white/8 rounded-2xl overflow-hidden"
+            style={{ animation: 'fadeInUp 0.3s cubic-bezier(0.22,1,0.36,1) both' }}
+          >
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/6">
+              <h3 className="text-white text-[15px] font-semibold">
+                {selectedAccount.name}
+                <span className="text-slate-500 font-normal ml-2 text-[13px]">transactions</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowAddTx((v) => !v); setTxForm(emptyTxForm()) }}
+                className="bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-all duration-200"
+              >
+                {showAddTx ? 'Cancel' : '+ Add Transaction'}
+              </button>
+            </div>
+
+            {/* Add transaction form */}
+            {showAddTx && (
+              <div className="px-6 py-5 border-b border-white/6">
+                <form onSubmit={handleAddTransaction} noValidate>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="tx-type" className="block text-[12px] font-medium text-slate-400 tracking-wide">Type</label>
+                      <select id="tx-type" name="type" value={txForm.type} onChange={handleTxFormChange} className={inputClass}>
+                        <option value="income">Income</option>
+                        <option value="expense">Expense</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="tx-amount" className="block text-[12px] font-medium text-slate-400 tracking-wide">Amount</label>
+                      <input
+                        id="tx-amount"
+                        name="amount"
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        value={txForm.amount}
+                        onChange={handleTxFormChange}
+                        placeholder="0.00"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="tx-category" className="block text-[12px] font-medium text-slate-400 tracking-wide">Category</label>
+                      <input
+                        id="tx-category"
+                        name="category"
+                        value={txForm.category}
+                        onChange={handleTxFormChange}
+                        placeholder="e.g. Salary"
+                        maxLength={100}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="tx-description" className="block text-[12px] font-medium text-slate-400 tracking-wide">Description (optional)</label>
+                      <input
+                        id="tx-description"
+                        name="description"
+                        value={txForm.description}
+                        onChange={handleTxFormChange}
+                        placeholder="Optional note"
+                        maxLength={500}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="tx-date" className="block text-[12px] font-medium text-slate-400 tracking-wide">Date</label>
+                      <input
+                        id="tx-date"
+                        name="date"
+                        type="date"
+                        value={txForm.date}
+                        onChange={handleTxFormChange}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingTx}
+                    className="bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[13px] font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingTx ? 'Saving…' : 'Save transaction'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Transaction list */}
+            {loadingTx ? (
+              <div className="text-slate-500 text-[13px] text-center py-12">Loading…</div>
+            ) : transactions.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-500 text-[13px]">No transactions yet for this account.</p>
+              </div>
+            ) : (
+              <ul>
+                {transactions.map((tx) => (
+                  <li
+                    key={tx.id}
+                    className="flex items-center justify-between px-6 py-3.5 border-b border-white/4 last:border-0 hover:bg-white/[0.02] transition-colors duration-150"
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div
+                        className={`w-1.5 h-8 rounded-full flex-shrink-0 ${
+                          tx.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-white text-[13.5px] font-medium truncate">{tx.category}</p>
+                        {tx.description && (
+                          <p className="text-slate-500 text-[12px] truncate">{tx.description}</p>
+                        )}
+                        <p className="text-slate-600 text-[11px]">{tx.date}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                      <span
+                        className={`text-[15px] font-bold tracking-tight ${
+                          tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {tx.type === 'income' ? '+' : '−'}
+                        {parseFloat(tx.amount).toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        <span className="text-slate-500 text-[11px] font-normal ml-1">{selectedAccount.currency}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTransaction(tx)}
+                        aria-label={pendingDeleteTxId === tx.id ? 'Confirm delete' : 'Delete transaction'}
+                        className={`transition-colors duration-150 ${
+                          pendingDeleteTxId === tx.id
+                            ? 'text-red-400 text-[11px] font-semibold'
+                            : 'text-slate-700 hover:text-red-400'
+                        }`}
+                      >
+                        {pendingDeleteTxId === tx.id ? 'Delete?' : <TrashIcon />}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </main>

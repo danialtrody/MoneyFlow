@@ -6,3 +6,8 @@ class AccountType(str, enum.Enum):
     cash = "cash"
     credit_card = "credit_card"
     savings = "savings"
+
+
+class TransactionType(str, enum.Enum):
+    income = "income"
+    expense = "expense"
