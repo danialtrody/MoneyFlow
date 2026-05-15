@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies import get_current_user
+from models.user import User
 from schemas.user import LoginRequest, UserCreate, UserResponse
 from services import user_service
 
@@ -51,6 +53,11 @@ def login(
         secure=_COOKIE_SECURE,
     )
     return UserResponse.model_validate(user)
+
+
+@router.get("/me", response_model=UserResponse)
+def me(current_user: User = Depends(get_current_user)) -> UserResponse:
+    return UserResponse.model_validate(current_user)
 
 
 @router.post("/logout", response_model=dict[str, str])

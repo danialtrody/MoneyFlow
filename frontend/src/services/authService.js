@@ -9,7 +9,7 @@ export async function login(email, password) {
     credentials: 'include',
     body: JSON.stringify({ email, password }),
   })
-  return handleResponse(response)
+  return handleResponse(response, { skipAuthRedirect: true })
 }
 
 export async function logout() {
@@ -17,6 +17,12 @@ export async function logout() {
     method: 'POST',
     credentials: 'include',
   })
+  return handleResponse(response)
+}
+
+export async function getMe() {
+  const response = await fetch(`${BASE_URL}/auth/me`, { credentials: 'include' })
+  if (response.status === 401) return null
   return handleResponse(response)
 }
 

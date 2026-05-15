@@ -19,6 +19,16 @@ export async function createAccount(data) {
   return handleResponse(response)
 }
 
+export async function updateAccount(id, data) {
+  const response = await fetch(`${BASE_URL}/accounts/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  return handleResponse(response)
+}
+
 export async function deleteAccount(id) {
   const response = await fetch(`${BASE_URL}/accounts/${id}`, {
     method: 'DELETE',

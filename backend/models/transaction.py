@@ -28,7 +28,7 @@ class Transaction(Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     category_id: Mapped[int] = mapped_column(
-        ForeignKey("categories.id"), nullable=False
+        ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False
     )
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     date: Mapped[date] = mapped_column(Date, nullable=False)

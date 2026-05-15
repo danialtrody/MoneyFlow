@@ -21,7 +21,7 @@ class Account(Base):
         nullable=False,
     )
     balance: Mapped[Decimal] = mapped_column(
-        Numeric(10, 2), nullable=False, default=Decimal("0.00")
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
     )
     currency: Mapped[str] = mapped_column(
         String(10), nullable=False, default="USD"
