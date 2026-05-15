@@ -17,6 +17,16 @@ export async function createTransaction(data) {
   return handleResponse(response)
 }
 
+export async function updateTransaction(id, data) {
+  const response = await fetch(`${BASE_URL}/transactions/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  return handleResponse(response)
+}
+
 export async function deleteTransaction(id) {
   const response = await fetch(`${BASE_URL}/transactions/${id}`, {
     method: 'DELETE',

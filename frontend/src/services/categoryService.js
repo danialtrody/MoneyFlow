@@ -20,6 +20,16 @@ export async function createCategory(data) {
   return handleResponse(res)
 }
 
+export async function updateCategory(id, data) {
+  const res = await fetch(`${BASE_URL}/categories/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
+
 export async function deleteCategory(id) {
   const res = await fetch(`${BASE_URL}/categories/${id}`, {
     method: 'DELETE',

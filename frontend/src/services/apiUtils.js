@@ -1,4 +1,8 @@
-export async function handleResponse(response) {
+export async function handleResponse(response, { skipAuthRedirect = false } = {}) {
+  if (response.status === 401 && !skipAuthRedirect) {
+    window.dispatchEvent(new CustomEvent('auth:expired'))
+    throw new Error('Session expired. Please log in again.')
+  }
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const detail = Array.isArray(data.detail)
