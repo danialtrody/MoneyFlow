@@ -23,6 +23,13 @@ def mock_account_repo() -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
+def mock_cat_repo() -> Generator[MagicMock, None, None]:
+    with patch("services.transaction_service.category_repository") as m:
+        m.get_by_id.return_value = MagicMock()
+        yield m
+
+
+@pytest.fixture
 def mock_db() -> MagicMock:
     return MagicMock()
 
@@ -68,7 +75,10 @@ def test_list_transactions_filtered_by_account(
 
 
 def test_create_income_adds_to_balance(
-    mock_tx_repo: MagicMock, mock_account_repo: MagicMock, mock_db: MagicMock
+    mock_tx_repo: MagicMock,
+    mock_account_repo: MagicMock,
+    mock_cat_repo: MagicMock,
+    mock_db: MagicMock,
 ) -> None:
     account = _make_account(balance=Decimal("500.00"))
     mock_account_repo.get_by_id.return_value = account
@@ -76,7 +86,7 @@ def test_create_income_adds_to_balance(
         account_id=1,
         type=TransactionType.income,
         amount=Decimal("200.00"),
-        category="Salary",
+        category_id=1,
         date=date.today(),
     )
 
@@ -87,7 +97,10 @@ def test_create_income_adds_to_balance(
 
 
 def test_create_expense_subtracts_from_balance(
-    mock_tx_repo: MagicMock, mock_account_repo: MagicMock, mock_db: MagicMock
+    mock_tx_repo: MagicMock,
+    mock_account_repo: MagicMock,
+    mock_cat_repo: MagicMock,
+    mock_db: MagicMock,
 ) -> None:
     account = _make_account(balance=Decimal("500.00"))
     mock_account_repo.get_by_id.return_value = account
@@ -95,7 +108,7 @@ def test_create_expense_subtracts_from_balance(
         account_id=1,
         type=TransactionType.expense,
         amount=Decimal("150.00"),
-        category="Food",
+        category_id=1,
         date=date.today(),
     )
 
@@ -105,14 +118,17 @@ def test_create_expense_subtracts_from_balance(
 
 
 def test_create_raises_when_account_not_found(
-    mock_tx_repo: MagicMock, mock_account_repo: MagicMock, mock_db: MagicMock
+    mock_tx_repo: MagicMock,
+    mock_account_repo: MagicMock,
+    mock_cat_repo: MagicMock,
+    mock_db: MagicMock,
 ) -> None:
     mock_account_repo.get_by_id.return_value = None
     data = TransactionCreate(
         account_id=99,
         type=TransactionType.income,
         amount=Decimal("100.00"),
-        category="Test",
+        category_id=1,
         date=date.today(),
     )
 

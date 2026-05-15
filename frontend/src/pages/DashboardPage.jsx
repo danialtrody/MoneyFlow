@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { CloseIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
+import { ChevronDownIcon, CloseIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts } from '../services/accountService'
 import { logout } from '../services/authService'
+import { createCategory, deleteCategory, getCategories } from '../services/categoryService'
 import {
   createTransaction,
   deleteTransaction,
@@ -37,7 +38,7 @@ const inputClass =
 const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 'USD' }
 
 const today = () => new Date().toISOString().split('T')[0]
-const emptyTxForm = () => ({ type: 'income', amount: '', category: '', description: '', date: today() })
+const emptyTxForm = () => ({ type: 'income', amount: '', category_id: '', description: '', date: today() })
 
 export default function DashboardPage({ user, onLogout }) {
   const [accounts, setAccounts] = useState([])
@@ -57,6 +58,15 @@ export default function DashboardPage({ user, onLogout }) {
   const [pendingDeleteTxId, setPendingDeleteTxId] = useState(null)
   const pendingDeleteTxTimerRef = useRef(null)
   const selectedAccountIdRef = useRef(null)
+  const [categories, setCategories] = useState([])
+  const categoriesLoadedRef = useRef(false)
+  const [showNewCat, setShowNewCat] = useState(false)
+  const [newCatForm, setNewCatForm] = useState({ name: '' })
+  const [isSubmittingCat, setIsSubmittingCat] = useState(false)
+  const [pendingDeleteCatId, setPendingDeleteCatId] = useState(null)
+  const pendingDeleteCatTimerRef = useRef(null)
+  const [showCatDropdown, setShowCatDropdown] = useState(false)
+  const catDropdownRef = useRef(null)
 
   const { toasts, addToast, removeToast } = useToast()
 
@@ -71,8 +81,20 @@ export default function DashboardPage({ user, onLogout }) {
     return () => {
       clearTimeout(pendingDeleteTimerRef.current)
       clearTimeout(pendingDeleteTxTimerRef.current)
+      clearTimeout(pendingDeleteCatTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!showCatDropdown) return
+    function handleClickOutside(e) {
+      if (catDropdownRef.current && !catDropdownRef.current.contains(e.target)) {
+        setShowCatDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showCatDropdown])
 
   useEffect(() => {
     selectedAccountIdRef.current = selectedAccountId
@@ -89,6 +111,16 @@ export default function DashboardPage({ user, onLogout }) {
       .catch(() => addToast('error', 'Failed to load transactions.'))
       .finally(() => setLoadingTx(false))
   }, [selectedAccountId, addToast])
+
+  useEffect(() => {
+    if (!showAddTx || categoriesLoadedRef.current) return
+    getCategories()
+      .then((data) => {
+        categoriesLoadedRef.current = true
+        setCategories(data)
+      })
+      .catch(() => addToast('error', 'Failed to load categories.'))
+  }, [showAddTx, addToast])
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
 
@@ -164,12 +196,67 @@ export default function DashboardPage({ user, onLogout }) {
   }
 
   function handleTxFormChange(e) {
-    setTxForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setTxForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'type' ? { category_id: '' } : {}),
+    }))
+    if (name === 'type') {
+      setShowNewCat(false)
+      setNewCatForm({ name: '' })
+      setPendingDeleteCatId(null)
+      setShowCatDropdown(false)
+    }
+  }
+
+  async function handleAddCategory() {
+    if (!newCatForm.name.trim()) {
+      addToast('error', 'Category name is required.')
+      return
+    }
+    setIsSubmittingCat(true)
+    try {
+      const cat = await createCategory({
+        name: newCatForm.name.trim(),
+        type: txForm.type,
+      })
+      setCategories((prev) => [...prev, cat])
+      setTxForm((prev) => ({ ...prev, category_id: String(cat.id) }))
+      setNewCatForm({ name: '' })
+      setShowNewCat(false)
+      addToast('success', `Category "${cat.name}" created.`)
+    } catch (err) {
+      addToast('error', err.message || 'Failed to create category.')
+    } finally {
+      setIsSubmittingCat(false)
+    }
+  }
+
+  async function handleDeleteCategory(cat) {
+    if (pendingDeleteCatId !== cat.id) {
+      setPendingDeleteCatId(cat.id)
+      clearTimeout(pendingDeleteCatTimerRef.current)
+      pendingDeleteCatTimerRef.current = setTimeout(() => setPendingDeleteCatId(null), 3000)
+      return
+    }
+    clearTimeout(pendingDeleteCatTimerRef.current)
+    setPendingDeleteCatId(null)
+    try {
+      await deleteCategory(cat.id)
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id))
+      if (txForm.category_id === String(cat.id)) {
+        setTxForm((prev) => ({ ...prev, category_id: '' }))
+      }
+      addToast('success', `Category "${cat.name}" deleted.`)
+    } catch (err) {
+      addToast('error', err.message || 'Failed to delete category.')
+    }
   }
 
   async function handleAddTransaction(e) {
     e.preventDefault()
-    if (!txForm.category.trim()) {
+    if (!txForm.category_id) {
       addToast('error', 'Category is required.')
       return
     }
@@ -184,7 +271,7 @@ export default function DashboardPage({ user, onLogout }) {
         account_id: accountId,
         type: txForm.type,
         amount: parseFloat(txForm.amount),
-        category: txForm.category.trim(),
+        category_id: parseInt(txForm.category_id, 10),
         description: txForm.description.trim() || null,
         date: txForm.date || today(),
       })
@@ -204,6 +291,20 @@ export default function DashboardPage({ user, onLogout }) {
     } finally {
       setIsSubmittingTx(false)
     }
+  }
+
+  function handleToggleAddTx() {
+    setShowAddTx((v) => !v)
+    setTxForm(emptyTxForm())
+    setShowNewCat(false)
+    setNewCatForm({ name: '' })
+    setPendingDeleteCatId(null)
+    setShowCatDropdown(false)
+  }
+
+  function handleCancelNewCat() {
+    setShowNewCat(false)
+    setNewCatForm({ name: '' })
   }
 
   async function handleDeleteTransaction(tx) {
@@ -431,7 +532,7 @@ export default function DashboardPage({ user, onLogout }) {
               </h3>
               <button
                 type="button"
-                onClick={() => { setShowAddTx((v) => !v); setTxForm(emptyTxForm()) }}
+                onClick={handleToggleAddTx}
                 className="bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-all duration-200"
               >
                 {showAddTx ? 'Cancel' : '+ Add Transaction'}
@@ -466,15 +567,93 @@ export default function DashboardPage({ user, onLogout }) {
                     </div>
                     <div className="space-y-1.5">
                       <label htmlFor="tx-category" className="block text-[12px] font-medium text-slate-400 tracking-wide">Category</label>
-                      <input
-                        id="tx-category"
-                        name="category"
-                        value={txForm.category}
-                        onChange={handleTxFormChange}
-                        placeholder="e.g. Salary"
-                        maxLength={100}
-                        className={inputClass}
-                      />
+                      <div className="relative" ref={catDropdownRef}>
+                        <button
+                          id="tx-category"
+                          type="button"
+                          onClick={() => setShowCatDropdown((v) => !v)}
+                          className={`${inputClass} flex items-center justify-between`}
+                        >
+                          <span className={txForm.category_id ? 'text-white' : 'text-slate-600'}>
+                            {txForm.category_id
+                              ? (categories.find((c) => String(c.id) === txForm.category_id)?.name ?? 'Select category…')
+                              : 'Select category…'}
+                          </span>
+                          <ChevronDownIcon />
+                        </button>
+                        {showCatDropdown && (
+                          <div className="absolute z-20 w-full mt-1 bg-[#0c1628] border border-white/10 rounded-xl overflow-hidden shadow-2xl max-h-52 overflow-y-auto">
+                            <button
+                              type="button"
+                              onClick={() => { setTxForm((p) => ({ ...p, category_id: '' })); setShowCatDropdown(false) }}
+                              className="w-full text-left px-4 py-2.5 text-[13px] text-slate-500 hover:bg-white/4"
+                            >
+                              Select category…
+                            </button>
+                            {categories.filter((c) => c.type === txForm.type).map((cat) => (
+                              <div
+                                key={cat.id}
+                                className="flex items-center border-t border-white/4 hover:bg-white/4"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => { setTxForm((p) => ({ ...p, category_id: String(cat.id) })); setShowCatDropdown(false) }}
+                                  className="flex-1 text-left px-4 py-2.5 text-[13px] text-white"
+                                >
+                                  {cat.name}
+                                </button>
+                                {cat.user_id != null && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCategory(cat)}
+                                    aria-label={pendingDeleteCatId === cat.id ? 'Confirm delete' : 'Delete category'}
+                                    className={`px-3 py-2.5 text-[11px] font-semibold transition-colors flex-shrink-0 ${
+                                      pendingDeleteCatId === cat.id ? 'text-red-400' : 'text-slate-600 hover:text-red-400'
+                                    }`}
+                                  >
+                                    {pendingDeleteCatId === cat.id ? 'Delete?' : '×'}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {!showNewCat ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowNewCat(true)}
+                          className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors mt-1"
+                        >
+                          + New category
+                        </button>
+                      ) : (
+                        <div className="mt-2 flex flex-wrap gap-2 items-center">
+                          <input
+                            aria-label="New category name"
+                            value={newCatForm.name}
+                            onChange={(e) => setNewCatForm((p) => ({ ...p, name: e.target.value }))}
+                            placeholder="Category name"
+                            maxLength={100}
+                            className="flex-1 bg-white/4 border border-white/8 rounded-lg px-3 py-2 text-white text-[13px] placeholder:text-slate-600 outline-none focus:border-blue-500/50"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddCategory}
+                            disabled={isSubmittingCat}
+                            className="text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {isSubmittingCat ? '…' : 'Add'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelNewCat}
+                            className="text-[12px] text-slate-500 hover:text-slate-300 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <label htmlFor="tx-description" className="block text-[12px] font-medium text-slate-400 tracking-wide">Description (optional)</label>
@@ -532,7 +711,7 @@ export default function DashboardPage({ user, onLogout }) {
                         }`}
                       />
                       <div className="min-w-0">
-                        <p className="text-white text-[13.5px] font-medium truncate">{tx.category}</p>
+                        <p className="text-white text-[13.5px] font-medium truncate">{tx.category_name}</p>
                         {tx.description && (
                           <p className="text-slate-500 text-[12px] truncate">{tx.description}</p>
                         )}

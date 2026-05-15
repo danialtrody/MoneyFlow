@@ -3,6 +3,7 @@ from datetime import date
 from fastapi.testclient import TestClient
 
 _ACCOUNTS = "/accounts"
+_CATEGORIES = "/categories"
 _TRANSACTIONS = "/transactions"
 _REGISTER = "/auth/register"
 _LOGIN = "/auth/login"
@@ -21,20 +22,36 @@ def _create_account(client: TestClient) -> int:
     return client.post(_ACCOUNTS, json=_VALID_ACCOUNT).json()["id"]
 
 
-def _tx_payload(account_id: int, type: str = "income", amount: float = 100.0) -> dict:
+def _create_category(client: TestClient, type: str = "income") -> int:
+    return client.post(_CATEGORIES, json={"name": "Test", "type": type}).json()["id"]
+
+
+def _tx_payload(
+    account_id: int,
+    category_id: int,
+    type: str = "income",
+    amount: float = 100.0,
+) -> dict:
     return {
         "account_id": account_id,
         "type": type,
         "amount": amount,
-        "category": "Salary",
+        "category_id": category_id,
         "date": str(date.today()),
     }
 
 
 def test_create_transaction_requires_auth(client: TestClient) -> None:
-    response = client.post(_TRANSACTIONS, json={"account_id": 1, "type": "income",
-                                                 "amount": 100, "category": "X",
-                                                 "date": str(date.today())})
+    response = client.post(
+        _TRANSACTIONS,
+        json={
+            "account_id": 1,
+            "type": "income",
+            "amount": 100,
+            "category_id": 1,
+            "date": str(date.today()),
+        },
+    )
 
     assert response.status_code == 401
 
@@ -46,19 +63,21 @@ def test_get_transactions_requires_auth(client: TestClient) -> None:
 def test_create_income_increases_account_balance(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
+    category_id = _create_category(client, "income")
 
-    response = client.post(_TRANSACTIONS, json=_tx_payload(account_id, "income", 250.00))
+    response = client.post(_TRANSACTIONS, json=_tx_payload(account_id, category_id, "income", 250.00))
 
     assert response.status_code == 201
-    account = client.get(f"{_ACCOUNTS}").json()[0]
+    account = client.get(_ACCOUNTS).json()[0]
     assert float(account["balance"]) == 1250.00
 
 
 def test_create_expense_decreases_account_balance(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
+    category_id = _create_category(client, "expense")
 
-    client.post(_TRANSACTIONS, json=_tx_payload(account_id, "expense", 200.00))
+    client.post(_TRANSACTIONS, json=_tx_payload(account_id, category_id, "expense", 200.00))
 
     account = client.get(_ACCOUNTS).json()[0]
     assert float(account["balance"]) == 800.00
@@ -67,14 +86,15 @@ def test_create_expense_decreases_account_balance(client: TestClient) -> None:
 def test_create_transaction_returns_correct_fields(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
+    category_id = _create_category(client)
 
-    response = client.post(_TRANSACTIONS, json=_tx_payload(account_id))
+    response = client.post(_TRANSACTIONS, json=_tx_payload(account_id, category_id))
 
     data = response.json()
     assert data["account_id"] == account_id
     assert data["type"] == "income"
     assert float(data["amount"]) == 100.00
-    assert data["category"] == "Salary"
+    assert data["category_id"] == category_id
     assert "id" in data
     assert "created_at" in data
 
@@ -82,8 +102,10 @@ def test_create_transaction_returns_correct_fields(client: TestClient) -> None:
 def test_list_transactions_returns_all(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
-    client.post(_TRANSACTIONS, json=_tx_payload(account_id, "income", 100))
-    client.post(_TRANSACTIONS, json=_tx_payload(account_id, "expense", 50))
+    income_cat = _create_category(client, "income")
+    expense_cat = _create_category(client, "expense")
+    client.post(_TRANSACTIONS, json=_tx_payload(account_id, income_cat, "income", 100))
+    client.post(_TRANSACTIONS, json=_tx_payload(account_id, expense_cat, "expense", 50))
 
     response = client.get(_TRANSACTIONS)
 
@@ -95,8 +117,9 @@ def test_list_transactions_filtered_by_account(client: TestClient) -> None:
     _login(client, _USER_A)
     acc1 = _create_account(client)
     acc2 = client.post(_ACCOUNTS, json={"name": "Savings", "type": "savings"}).json()["id"]
-    client.post(_TRANSACTIONS, json=_tx_payload(acc1, "income", 100))
-    client.post(_TRANSACTIONS, json=_tx_payload(acc2, "income", 200))
+    cat_id = _create_category(client)
+    client.post(_TRANSACTIONS, json=_tx_payload(acc1, cat_id, "income", 100))
+    client.post(_TRANSACTIONS, json=_tx_payload(acc2, cat_id, "income", 200))
 
     response = client.get(f"{_TRANSACTIONS}?account_id={acc1}")
 
@@ -108,7 +131,8 @@ def test_list_transactions_filtered_by_account(client: TestClient) -> None:
 def test_update_transaction_reverses_and_reapplies_balance(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
-    tx_id = client.post(_TRANSACTIONS, json=_tx_payload(account_id, "income", 100)).json()["id"]
+    cat_id = _create_category(client)
+    tx_id = client.post(_TRANSACTIONS, json=_tx_payload(account_id, cat_id, "income", 100)).json()["id"]
 
     response = client.put(f"{_TRANSACTIONS}/{tx_id}", json={"amount": 300.00})
 
@@ -120,7 +144,8 @@ def test_update_transaction_reverses_and_reapplies_balance(client: TestClient) -
 def test_delete_transaction_reverses_balance(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
-    tx_id = client.post(_TRANSACTIONS, json=_tx_payload(account_id, "income", 500)).json()["id"]
+    cat_id = _create_category(client)
+    tx_id = client.post(_TRANSACTIONS, json=_tx_payload(account_id, cat_id, "income", 500)).json()["id"]
 
     response = client.delete(f"{_TRANSACTIONS}/{tx_id}")
 
@@ -144,7 +169,8 @@ def test_update_transaction_not_found_returns_404(client: TestClient) -> None:
 def test_wrong_user_cannot_access_transaction(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
-    tx_id = client.post(_TRANSACTIONS, json=_tx_payload(account_id)).json()["id"]
+    cat_id = _create_category(client)
+    tx_id = client.post(_TRANSACTIONS, json=_tx_payload(account_id, cat_id)).json()["id"]
 
     _login(client, _USER_B)
 
@@ -155,7 +181,8 @@ def test_wrong_user_cannot_access_transaction(client: TestClient) -> None:
 def test_create_transaction_negative_amount_returns_422(client: TestClient) -> None:
     _login(client, _USER_A)
     account_id = _create_account(client)
-    payload = _tx_payload(account_id)
+    cat_id = _create_category(client)
+    payload = _tx_payload(account_id, cat_id)
     payload["amount"] = -50
 
     assert client.post(_TRANSACTIONS, json=payload).status_code == 422
@@ -169,6 +196,7 @@ def test_create_transaction_missing_fields_returns_422(client: TestClient) -> No
 
 def test_create_transaction_account_not_found_returns_404(client: TestClient) -> None:
     _login(client, _USER_A)
-    payload = _tx_payload(99999)
+    cat_id = _create_category(client)
+    payload = _tx_payload(99999, cat_id)
 
     assert client.post(_TRANSACTIONS, json=payload).status_code == 404
