@@ -1,12 +1,15 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
 from enums import TransactionType
+
+if TYPE_CHECKING:
+    from models.category import Category
 
 
 class Transaction(Base):
@@ -24,9 +27,13 @@ class Transaction(Base):
         nullable=False,
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id"), nullable=False
+    )
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    category: Mapped["Category"] = relationship("Category", lazy="joined")

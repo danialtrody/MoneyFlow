@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from enums import TransactionType
 from models.transaction import Transaction
-from repositories import account_repository, transaction_repository
+from repositories import account_repository, category_repository, transaction_repository
 from schemas.transaction import TransactionCreate, TransactionUpdate
 
 
@@ -21,12 +21,15 @@ def create_transaction(
     if account is None:
         raise ValueError("Account not found")
 
+    if category_repository.get_by_id(db, data.category_id) is None:
+        raise ValueError("Category not found")
+
     transaction = Transaction(
         account_id=data.account_id,
         user_id=user_id,
         type=data.type,
         amount=data.amount,
-        category=data.category,
+        category_id=data.category_id,
         description=data.description,
         date=data.date,
     )
@@ -49,7 +52,13 @@ def update_transaction(
     if transaction is None:
         raise ValueError("Transaction not found")
 
+    if data.category_id is not None:
+        if category_repository.get_by_id(db, data.category_id) is None:
+            raise ValueError("Category not found")
+
     account = account_repository.get_by_id(db, transaction.account_id, user_id)
+    if account is None:
+        raise ValueError("Account not found")
 
     if transaction.type == TransactionType.income:
         account.balance -= transaction.amount
@@ -75,6 +84,8 @@ def delete_transaction(db: Session, id: int, user_id: int) -> None:
         raise ValueError("Transaction not found")
 
     account = account_repository.get_by_id(db, transaction.account_id, user_id)
+    if account is None:
+        raise ValueError("Account not found")
 
     if transaction.type == TransactionType.income:
         account.balance -= transaction.amount

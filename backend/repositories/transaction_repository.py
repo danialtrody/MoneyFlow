@@ -22,6 +22,12 @@ def get_by_id(db: Session, id: int, user_id: int) -> Optional[Transaction]:
     )
 
 
+def exists_for_category(db: Session, category_id: int) -> bool:
+    return db.query(Transaction.id).filter(
+        Transaction.category_id == category_id
+    ).first() is not None
+
+
 def add(db: Session, transaction: Transaction) -> None:
     db.add(transaction)
 

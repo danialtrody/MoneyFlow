@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from enums import AccountType, TransactionType
+from models.category import Category
 from repositories import account_repository, transaction_repository, user_repository
 
 
@@ -18,13 +19,21 @@ def _create_account(db: Session, user_id: int) -> object:
     )
 
 
+def _create_category(db: Session) -> int:
+    cat = Category(user_id=None, name="Salary", type=TransactionType.income)
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return cat.id
+
+
 def _create_transaction(
     db: Session,
     account_id: int,
     user_id: int,
+    category_id: int,
     type: TransactionType = TransactionType.income,
     amount: Decimal = Decimal("100.00"),
-    category: str = "Salary",
 ) -> object:
     from models.transaction import Transaction
 
@@ -33,7 +42,7 @@ def _create_transaction(
         user_id=user_id,
         type=type,
         amount=amount,
-        category=category,
+        category_id=category_id,
         description=None,
         date=date.today(),
     )
@@ -54,14 +63,15 @@ def test_get_all_returns_empty_for_new_user(db: Session) -> None:
 def test_get_all_returns_transactions_belonging_to_user(db: Session) -> None:
     user_id = _create_user(db)
     account = _create_account(db, user_id)
-    _create_transaction(db, account.id, user_id, category="A")
-    _create_transaction(db, account.id, user_id, category="B")
+    cat_id = _create_category(db)
+    _create_transaction(db, account.id, user_id, cat_id, amount=Decimal("100.00"))
+    _create_transaction(db, account.id, user_id, cat_id, amount=Decimal("200.00"))
 
     result = transaction_repository.get_all(db, user_id)
 
     assert len(result) == 2
-    categories = {t.category for t in result}
-    assert categories == {"A", "B"}
+    amounts = {t.amount for t in result}
+    assert amounts == {Decimal("100.00"), Decimal("200.00")}
 
 
 def test_get_all_does_not_return_other_users_transactions(db: Session) -> None:
@@ -69,13 +79,14 @@ def test_get_all_does_not_return_other_users_transactions(db: Session) -> None:
     user_b = _create_user(db, "b@example.com")
     account_a = _create_account(db, user_a)
     account_b = _create_account(db, user_b)
-    _create_transaction(db, account_a.id, user_a, category="A's")
-    _create_transaction(db, account_b.id, user_b, category="B's")
+    cat_id = _create_category(db)
+    _create_transaction(db, account_a.id, user_a, cat_id, amount=Decimal("111.00"))
+    _create_transaction(db, account_b.id, user_b, cat_id, amount=Decimal("222.00"))
 
     result = transaction_repository.get_all(db, user_a)
 
     assert len(result) == 1
-    assert result[0].category == "A's"
+    assert result[0].amount == Decimal("111.00")
 
 
 def test_get_all_filtered_by_account_id(db: Session) -> None:
@@ -84,19 +95,21 @@ def test_get_all_filtered_by_account_id(db: Session) -> None:
     acc2 = account_repository.create(
         db, user_id, "Savings", AccountType.savings, Decimal("0.00"), "USD"
     )
-    _create_transaction(db, acc1.id, user_id, category="From acc1")
-    _create_transaction(db, acc2.id, user_id, category="From acc2")
+    cat_id = _create_category(db)
+    _create_transaction(db, acc1.id, user_id, cat_id, amount=Decimal("111.00"))
+    _create_transaction(db, acc2.id, user_id, cat_id, amount=Decimal("222.00"))
 
     result = transaction_repository.get_all(db, user_id, account_id=acc1.id)
 
     assert len(result) == 1
-    assert result[0].category == "From acc1"
+    assert result[0].amount == Decimal("111.00")
 
 
 def test_get_by_id_returns_transaction_when_found(db: Session) -> None:
     user_id = _create_user(db)
     account = _create_account(db, user_id)
-    tx = _create_transaction(db, account.id, user_id)
+    cat_id = _create_category(db)
+    tx = _create_transaction(db, account.id, user_id, cat_id)
 
     result = transaction_repository.get_by_id(db, tx.id, user_id)
 
@@ -116,7 +129,8 @@ def test_get_by_id_returns_none_for_wrong_user(db: Session) -> None:
     owner = _create_user(db, "owner@example.com")
     other = _create_user(db, "other@example.com")
     account = _create_account(db, owner)
-    tx = _create_transaction(db, account.id, owner)
+    cat_id = _create_category(db)
+    tx = _create_transaction(db, account.id, owner, cat_id)
 
     result = transaction_repository.get_by_id(db, tx.id, other)
 
@@ -126,7 +140,8 @@ def test_get_by_id_returns_none_for_wrong_user(db: Session) -> None:
 def test_delete_removes_transaction(db: Session) -> None:
     user_id = _create_user(db)
     account = _create_account(db, user_id)
-    tx = _create_transaction(db, account.id, user_id)
+    cat_id = _create_category(db)
+    tx = _create_transaction(db, account.id, user_id, cat_id)
     tx_id = tx.id
 
     transaction_repository.delete(db, tx)
