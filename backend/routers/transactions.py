@@ -49,6 +49,18 @@ def update_transaction(
     return TransactionResponse.model_validate(transaction)
 
 
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+def clear_transactions(
+    account_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    try:
+        transaction_service.clear_account_transactions(db, account_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_transaction(
     id: int,
