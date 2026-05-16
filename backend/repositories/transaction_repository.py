@@ -1,7 +1,10 @@
+from datetime import date as DateType
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from enums import TransactionType
 from models.transaction import Transaction
 
 
@@ -34,3 +37,29 @@ def add(db: Session, transaction: Transaction) -> None:
 
 def delete(db: Session, transaction: Transaction) -> None:
     db.delete(transaction)
+
+
+def delete_all_for_account(db: Session, account_id: int, user_id: int) -> None:
+    db.query(Transaction).filter(
+        Transaction.account_id == account_id,
+        Transaction.user_id == user_id,
+    ).delete(synchronize_session=False)
+
+
+def find_duplicate(
+    db: Session,
+    account_id: int,
+    date: DateType,
+    amount: Decimal,
+    transaction_type: TransactionType,
+) -> Optional[Transaction]:
+    return (
+        db.query(Transaction)
+        .filter(
+            Transaction.account_id == account_id,
+            Transaction.date == date,
+            Transaction.amount == amount,
+            Transaction.type == transaction_type,
+        )
+        .first()
+    )

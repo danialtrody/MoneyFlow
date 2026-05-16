@@ -39,3 +39,7 @@ def add(db: Session, category: Category) -> None:
 
 def delete(db: Session, category: Category) -> None:
     db.delete(category)
+
+
+def flush(db: Session) -> None:
+    db.flush()

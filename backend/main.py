@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from routers import accounts, auth, categories, transactions
+from routers import accounts, auth, categories, import_router, transactions
 
 load_dotenv()
 
@@ -38,6 +38,7 @@ app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(categories.router)
+app.include_router(import_router.router)
 
 
 @app.get("/health")

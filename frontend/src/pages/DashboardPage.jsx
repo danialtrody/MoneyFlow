@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDownIcon, CloseIcon, PencilIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts, updateAccount } from '../services/accountService'
 import { logout } from '../services/authService'
 import { createCategory, deleteCategory, getCategories, updateCategory } from '../services/categoryService'
+import { importTransactions } from '../services/importService'
 import {
+  clearTransactions,
   createTransaction,
   deleteTransaction,
   getTransactions,
@@ -83,6 +85,14 @@ export default function DashboardPage({ user, onLogout }) {
   const [editTxForm, setEditTxForm] = useState({ type: 'income', amount: '', category_id: '', description: '', date: '' })
   const [isSubmittingEditTx, setIsSubmittingEditTx] = useState(false)
 
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const importFileRef = useRef(null)
+
+  const [pendingClearAll, setPendingClearAll] = useState(false)
+  const [isClearingAll, setIsClearingAll] = useState(false)
+  const pendingClearAllTimerRef = useRef(null)
+
   const { toasts, addToast, removeToast } = useToast()
 
   useEffect(() => {
@@ -97,6 +107,7 @@ export default function DashboardPage({ user, onLogout }) {
       clearTimeout(pendingDeleteTimerRef.current)
       clearTimeout(pendingDeleteTxTimerRef.current)
       clearTimeout(pendingDeleteCatTimerRef.current)
+      clearTimeout(pendingClearAllTimerRef.current)
     }
   }, [])
 
@@ -116,6 +127,9 @@ export default function DashboardPage({ user, onLogout }) {
   }, [selectedAccountId])
 
   useEffect(() => {
+    setImportResult(null)
+    setPendingClearAll(false)
+    clearTimeout(pendingClearAllTimerRef.current)
     if (selectedAccountId === null) {
       setTransactions([])
       return
@@ -138,6 +152,26 @@ export default function DashboardPage({ user, onLogout }) {
   }, [addToast])
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
+
+  const txSummary = useMemo(() => {
+    let income = 0
+    let expense = 0
+    for (const tx of transactions) {
+      const amt = parseFloat(tx.amount)
+      if (tx.type === 'income') income += amt
+      else expense += amt
+    }
+    return { income, expense, net: income - expense }
+  }, [transactions])
+
+  const groupedTransactions = useMemo(() => {
+    const map = new Map()
+    for (const tx of transactions) {
+      if (!map.has(tx.date)) map.set(tx.date, [])
+      map.get(tx.date).push(tx)
+    }
+    return [...map.entries()]
+  }, [transactions])
 
   async function handleLogout() {
     await logout().catch(() => {})
@@ -478,6 +512,59 @@ export default function DashboardPage({ user, onLogout }) {
     }
   }
 
+  async function handleClearAll() {
+    if (!pendingClearAll) {
+      setPendingClearAll(true)
+      clearTimeout(pendingClearAllTimerRef.current)
+      pendingClearAllTimerRef.current = setTimeout(() => setPendingClearAll(false), 3000)
+      return
+    }
+    clearTimeout(pendingClearAllTimerRef.current)
+    setPendingClearAll(false)
+    setEditingTxId(null)
+    setPendingDeleteTxId(null)
+    const accountId = selectedAccountId
+    setIsClearingAll(true)
+    try {
+      await clearTransactions(accountId)
+      const updatedAccounts = await getAccounts()
+      setAccounts(updatedAccounts)
+      if (selectedAccountIdRef.current === accountId) setTransactions([])
+      setImportResult(null)
+      addToast('success', 'All transactions cleared.')
+    } catch (err) {
+      addToast('error', err.message || 'Failed to clear transactions.')
+    } finally {
+      setIsClearingAll(false)
+    }
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const accountId = selectedAccountId
+    setIsImporting(true)
+    setImportResult(null)
+    try {
+      const result = await importTransactions(accountId, file)
+      setImportResult(result)
+      const [updatedAccounts, updatedTxs, updatedCategories] = await Promise.all([
+        getAccounts(),
+        getTransactions(accountId),
+        getCategories(),
+      ])
+      setAccounts(updatedAccounts)
+      if (selectedAccountIdRef.current === accountId) setTransactions(updatedTxs)
+      setCategories(updatedCategories)
+      addToast('success', `Imported ${result.imported} transaction(s), ${result.skipped} skipped.`)
+    } catch (err) {
+      addToast('error', err.message || 'Import failed.')
+    } finally {
+      setIsImporting(false)
+      if (importFileRef.current) importFileRef.current.value = ''
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#020817] relative overflow-hidden">
 
@@ -748,14 +835,83 @@ export default function DashboardPage({ user, onLogout }) {
                 {selectedAccount.name}
                 <span className="text-slate-500 font-normal ml-2 text-[13px]">transactions</span>
               </h3>
-              <button
-                type="button"
-                onClick={handleToggleAddTx}
-                className="bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-all duration-200"
-              >
-                {showAddTx ? 'Cancel' : '+ Add Transaction'}
-              </button>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".csv,.xls"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="hidden"
+                  onChange={handleImportFile}
+                />
+                <button
+                  type="button"
+                  onClick={() => importFileRef.current?.click()}
+                  disabled={isImporting || isClearingAll}
+                  className="text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isImporting ? 'Importing…' : 'Import'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  aria-label="Clear all transactions"
+                  disabled={isClearingAll || isImporting || transactions.length === 0}
+                  className={`text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    pendingClearAll
+                      ? 'border-red-500/50 text-red-400 hover:border-red-500 hover:text-red-300'
+                      : 'border-white/10 text-slate-300 hover:text-white hover:border-white/20'
+                  }`}
+                >
+                  {isClearingAll ? 'Clearing…' : pendingClearAll ? 'Confirm?' : 'Clear all'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleAddTx}
+                  className="bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-all duration-200"
+                >
+                  {showAddTx ? 'Cancel' : '+ Add Transaction'}
+                </button>
+              </div>
             </div>
+
+            {/* Import results panel */}
+            {importResult && (
+              <div className="px-6 py-4 border-b border-white/6 bg-white/[0.015]">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-4">
+                    {importResult.imported > 0 ? (
+                      <span className="text-emerald-400 text-[13px] font-medium">
+                        ✓ {importResult.imported} imported
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-[13px] font-medium">No new transactions</span>
+                    )}
+                    {importResult.skipped > 0 && (
+                      <span className="text-slate-500 text-[13px]">{importResult.skipped} skipped</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setImportResult(null)}
+                    aria-label="Dismiss import result"
+                    className="text-slate-600 hover:text-slate-400 transition-colors"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    {importResult.errors.map((rowError) => (
+                      <p key={rowError.row} className="text-red-400/70 text-[12px]">
+                        Row {rowError.row}: {rowError.reason}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Add transaction form */}
             {showAddTx && (
@@ -958,148 +1114,197 @@ export default function DashboardPage({ user, onLogout }) {
                 <p className="text-slate-500 text-[13px]">No transactions yet for this account.</p>
               </div>
             ) : (
-              <ul>
-                {transactions.map((tx) => {
-                  const isEditingTx = editingTxId === tx.id
+              <>
+                {/* Summary strip */}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 py-3 border-b border-white/6 bg-white/[0.01]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Income</span>
+                    <span className="text-emerald-400 text-[13px] font-semibold tabular-nums">
+                      +{txSummary.income.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="w-px h-3 bg-white/10" />
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Expenses</span>
+                    <span className="text-red-400 text-[13px] font-semibold tabular-nums">
+                      −{txSummary.expense.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="w-px h-3 bg-white/10" />
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Net</span>
+                    <span className={`text-[13px] font-semibold tabular-nums ${txSummary.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {txSummary.net >= 0 ? '+' : '−'}{Math.abs(txSummary.net).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <span className="ml-auto text-slate-600 text-[11px]">{transactions.length} transactions</span>
+                </div>
+
+                {/* Grouped by date */}
+                {groupedTransactions.map(([date, txs]) => {
+                  const dayNet = txs.reduce(
+                    (sum, t) => sum + (t.type === 'income' ? parseFloat(t.amount) : -parseFloat(t.amount)),
+                    0,
+                  )
                   return (
-                    <li
-                      key={tx.id}
-                      className={`border-b border-white/4 last:border-0 transition-colors duration-150 ${
-                        isEditingTx
-                          ? 'px-6 py-4 bg-white/[0.02]'
-                          : 'flex items-center justify-between px-6 py-3.5 hover:bg-white/[0.02]'
-                      }`}
-                    >
-                      {isEditingTx ? (
-                        <form onSubmit={handleSaveTx} noValidate>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-                            <div>
-                              <label htmlFor={`edit-tx-type-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Type</label>
-                              <select id={`edit-tx-type-${tx.id}`} name="type" value={editTxForm.type} onChange={handleEditTxFormChange} className={compactInputClass}>
-                                <option value="income">Income</option>
-                                <option value="expense">Expense</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label htmlFor={`edit-tx-amount-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Amount</label>
-                              <input
-                                id={`edit-tx-amount-${tx.id}`}
-                                name="amount"
-                                type="number"
-                                step="any"
-                                min="0.01"
-                                value={editTxForm.amount}
-                                onChange={handleEditTxFormChange}
-                                placeholder="0.00"
-                                className={compactInputClass}
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor={`edit-tx-category-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Category</label>
-                              <select id={`edit-tx-category-${tx.id}`} name="category_id" value={editTxForm.category_id} onChange={handleEditTxFormChange} className={compactInputClass}>
-                                <option value="">Select…</option>
-                                {categories.filter((c) => c.type === editTxForm.type).map((c) => (
-                                  <option key={c.id} value={String(c.id)}>{c.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label htmlFor={`edit-tx-description-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Description</label>
-                              <input
-                                id={`edit-tx-description-${tx.id}`}
-                                name="description"
-                                value={editTxForm.description}
-                                onChange={handleEditTxFormChange}
-                                placeholder="Optional"
-                                maxLength={500}
-                                className={compactInputClass}
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor={`edit-tx-date-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Date</label>
-                              <input
-                                id={`edit-tx-date-${tx.id}`}
-                                name="date"
-                                type="date"
-                                value={editTxForm.date}
-                                onChange={handleEditTxFormChange}
-                                className={compactInputClass}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              type="submit"
-                              disabled={isSubmittingEditTx}
-                              className="text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              {isSubmittingEditTx ? '…' : 'Save'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleCancelEditTx}
-                              className="text-[12px] text-slate-400 hover:text-white px-2 py-1.5 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-4 min-w-0">
-                            <div
-                              className={`w-1.5 h-8 rounded-full flex-shrink-0 ${
-                                tx.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'
+                    <div key={date}>
+                      {/* Date header */}
+                      <div className="flex items-center gap-3 px-6 py-2 border-b border-white/4 bg-white/[0.008]">
+                        <span className="text-slate-400 text-[11.5px] font-semibold tracking-wide whitespace-nowrap">
+                          {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+                            weekday: 'short', month: 'short', day: 'numeric',
+                          })}
+                        </span>
+                        <div className="flex-1 h-px bg-white/6" />
+                        <span className={`text-[11px] font-semibold tabular-nums whitespace-nowrap ${dayNet >= 0 ? 'text-emerald-500/60' : 'text-red-500/60'}`}>
+                          {dayNet >= 0 ? '+' : '−'}{Math.abs(dayNet).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <ul>
+                        {txs.map((tx) => {
+                          const isEditingTx = editingTxId === tx.id
+                          return (
+                            <li
+                              key={tx.id}
+                              className={`border-b border-white/4 last:border-0 transition-colors duration-150 ${
+                                isEditingTx ? 'px-6 py-4 bg-white/[0.02]' : 'px-6 py-3.5 hover:bg-white/[0.02] group'
                               }`}
-                            />
-                            <div className="min-w-0">
-                              <p className="text-white text-[13.5px] font-medium truncate">{tx.category_name}</p>
-                              {tx.description && (
-                                <p className="text-slate-500 text-[12px] truncate">{tx.description}</p>
+                            >
+                              {isEditingTx ? (
+                                <form onSubmit={handleSaveTx} noValidate>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                                    <div>
+                                      <label htmlFor={`edit-tx-type-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Type</label>
+                                      <select id={`edit-tx-type-${tx.id}`} name="type" value={editTxForm.type} onChange={handleEditTxFormChange} className={compactInputClass}>
+                                        <option value="income">Income</option>
+                                        <option value="expense">Expense</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label htmlFor={`edit-tx-amount-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Amount</label>
+                                      <input
+                                        id={`edit-tx-amount-${tx.id}`}
+                                        name="amount"
+                                        type="number"
+                                        step="any"
+                                        min="0.01"
+                                        value={editTxForm.amount}
+                                        onChange={handleEditTxFormChange}
+                                        placeholder="0.00"
+                                        className={compactInputClass}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label htmlFor={`edit-tx-category-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Category</label>
+                                      <select id={`edit-tx-category-${tx.id}`} name="category_id" value={editTxForm.category_id} onChange={handleEditTxFormChange} className={compactInputClass}>
+                                        <option value="">Select…</option>
+                                        {categories.filter((c) => c.type === editTxForm.type).map((c) => (
+                                          <option key={c.id} value={String(c.id)}>{c.name}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label htmlFor={`edit-tx-description-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Description</label>
+                                      <input
+                                        id={`edit-tx-description-${tx.id}`}
+                                        name="description"
+                                        value={editTxForm.description}
+                                        onChange={handleEditTxFormChange}
+                                        placeholder="Optional"
+                                        maxLength={500}
+                                        className={compactInputClass}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label htmlFor={`edit-tx-date-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Date</label>
+                                      <input
+                                        id={`edit-tx-date-${tx.id}`}
+                                        name="date"
+                                        type="date"
+                                        value={editTxForm.date}
+                                        onChange={handleEditTxFormChange}
+                                        className={compactInputClass}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="submit"
+                                      disabled={isSubmittingEditTx}
+                                      className="text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                      {isSubmittingEditTx ? '…' : 'Save'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditTx}
+                                      className="text-[12px] text-slate-400 hover:text-white px-2 py-1.5 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </form>
+                              ) : (
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tx.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-white text-[13.5px] font-medium truncate">{tx.category_name}</p>
+                                        <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                          tx.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                                        }`}>
+                                          {tx.type === 'income' ? 'Income' : 'Expense'}
+                                        </span>
+                                      </div>
+                                      {tx.description && (
+                                        <p className="text-slate-600 text-[11px] truncate mt-0.5">{tx.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className={`text-[14px] font-bold tabular-nums ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                      {tx.type === 'income' ? '+' : '−'}
+                                      {parseFloat(tx.amount).toLocaleString('en-US', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                      <span className="text-slate-500 text-[11px] font-normal ml-1">{selectedAccount.currency}</span>
+                                    </span>
+                                    <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditTx(tx)}
+                                        aria-label="Edit transaction"
+                                        className="p-1.5 text-slate-600 hover:text-blue-400 rounded-lg hover:bg-white/4 transition-colors duration-150"
+                                      >
+                                        <PencilIcon />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteTransaction(tx)}
+                                        aria-label={pendingDeleteTxId === tx.id ? 'Confirm delete' : 'Delete transaction'}
+                                        className={`p-1.5 rounded-lg transition-colors duration-150 ${
+                                          pendingDeleteTxId === tx.id
+                                            ? 'text-red-400 text-[11px] font-semibold'
+                                            : 'text-slate-600 hover:text-red-400 hover:bg-white/4'
+                                        }`}
+                                      >
+                                        {pendingDeleteTxId === tx.id ? 'Delete?' : <TrashIcon />}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
                               )}
-                              <p className="text-slate-600 text-[11px]">{tx.date}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                            <span
-                              className={`text-[15px] font-bold tracking-tight ${
-                                tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'
-                              }`}
-                            >
-                              {tx.type === 'income' ? '+' : '−'}
-                              {parseFloat(tx.amount).toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                              <span className="text-slate-500 text-[11px] font-normal ml-1">{selectedAccount.currency}</span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditTx(tx)}
-                              aria-label="Edit transaction"
-                              className="text-slate-700 hover:text-blue-400 transition-colors duration-150"
-                            >
-                              <PencilIcon />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteTransaction(tx)}
-                              aria-label={pendingDeleteTxId === tx.id ? 'Confirm delete' : 'Delete transaction'}
-                              className={`transition-colors duration-150 ${
-                                pendingDeleteTxId === tx.id
-                                  ? 'text-red-400 text-[11px] font-semibold'
-                                  : 'text-slate-700 hover:text-red-400'
-                              }`}
-                            >
-                              {pendingDeleteTxId === tx.id ? 'Delete?' : <TrashIcon />}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </li>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
                   )
                 })}
-              </ul>
+              </>
             )}
           </div>
         )}

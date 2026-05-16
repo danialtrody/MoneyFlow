@@ -78,6 +78,22 @@ def update_transaction(
     return transaction
 
 
+def clear_account_transactions(db: Session, account_id: int, user_id: int) -> None:
+    account = account_repository.get_by_id(db, account_id, user_id)
+    if account is None:
+        raise ValueError("Account not found")
+
+    transactions = transaction_repository.get_all(db, user_id, account_id)
+    for tx in transactions:
+        if tx.type == TransactionType.income:
+            account.balance -= tx.amount
+        else:
+            account.balance += tx.amount
+
+    transaction_repository.delete_all_for_account(db, account_id, user_id)
+    db.commit()
+
+
 def delete_transaction(db: Session, id: int, user_id: int) -> None:
     transaction = transaction_repository.get_by_id(db, id, user_id)
     if transaction is None:
