@@ -35,3 +35,12 @@ export async function deleteTransaction(id) {
   if (response.status === 204) return
   return handleResponse(response)
 }
+
+export async function clearTransactions(accountId) {
+  const response = await fetch(`${BASE_URL}/transactions?account_id=${accountId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  if (response.status === 204) return
+  return handleResponse(response)
+}

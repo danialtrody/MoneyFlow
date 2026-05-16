@@ -200,3 +200,36 @@ def test_create_transaction_account_not_found_returns_404(client: TestClient) ->
     payload = _tx_payload(99999, cat_id)
 
     assert client.post(_TRANSACTIONS, json=payload).status_code == 404
+
+
+def test_clear_transactions_requires_auth(client: TestClient) -> None:
+    assert client.delete(f"{_TRANSACTIONS}?account_id=1").status_code == 401
+
+
+def test_clear_transactions_removes_all_and_reverses_balance(client: TestClient) -> None:
+    _login(client, _USER_A)
+    account_id = _create_account(client)
+    cat_id = _create_category(client, "expense")
+    client.post(_TRANSACTIONS, json=_tx_payload(account_id, cat_id, "expense", 200))
+    client.post(_TRANSACTIONS, json=_tx_payload(account_id, cat_id, "expense", 300))
+
+    response = client.delete(f"{_TRANSACTIONS}?account_id={account_id}")
+
+    assert response.status_code == 204
+    assert client.get(f"{_TRANSACTIONS}?account_id={account_id}").json() == []
+    account = client.get(_ACCOUNTS).json()[0]
+    assert float(account["balance"]) == 1000.00
+
+
+def test_clear_transactions_account_not_found_returns_404(client: TestClient) -> None:
+    _login(client, _USER_A)
+
+    assert client.delete(f"{_TRANSACTIONS}?account_id=99999").status_code == 404
+
+
+def test_clear_transactions_wrong_user_cannot_clear_other_users_account(client: TestClient) -> None:
+    _login(client, _USER_A)
+    account_id = _create_account(client)
+    _login(client, _USER_B)
+
+    assert client.delete(f"{_TRANSACTIONS}?account_id={account_id}").status_code == 404
