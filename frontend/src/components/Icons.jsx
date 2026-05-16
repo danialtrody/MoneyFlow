@@ -103,3 +103,14 @@ export function TrashIcon() {
     </svg>
   )
 }
+
+export function BarChartIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="12" width="4" height="9" />
+      <rect x="10" y="6" width="4" height="15" />
+      <rect x="17" y="3" width="4" height="18" />
+    </svg>
+  )
+}

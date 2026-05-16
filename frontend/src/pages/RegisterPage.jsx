@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { register } from '../services/authService'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/Toast'
@@ -7,7 +8,12 @@ import { TrendUpIcon, EyeIcon, EyeOffIcon, ArrowLeftIcon } from '../components/I
 const inputClass =
   'w-full bg-white/4 border border-white/8 rounded-xl px-4 py-3.5 text-white text-[14.5px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.09)]'
 
-export default function RegisterPage({ onNavigateToLogin }) {
+export default function RegisterPage() {
+  const navigate = useNavigate()
+  const timerRef = useRef(null)
+
+  useEffect(() => () => clearTimeout(timerRef.current), [])
+
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -35,7 +41,7 @@ export default function RegisterPage({ onNavigateToLogin }) {
     try {
       await register(email, password, fullName)
       addToast('success', 'Account created! Please sign in.')
-      setTimeout(() => onNavigateToLogin(), 1800)
+      timerRef.current = setTimeout(() => navigate('/login', { replace: true }), 1800)
     } catch (err) {
       addToast('error', err.message || 'Registration failed. Please try again.')
     } finally {
@@ -76,7 +82,7 @@ export default function RegisterPage({ onNavigateToLogin }) {
       >
         <div className="absolute inset-0 rounded-[28px] bg-linear-to-br from-violet-500/8 to-blue-500/8 blur-2xl scale-[1.06] pointer-events-none" />
 
-        <div className="relative bg-white/2.5 backdrop-blur-2xl border border-white/8 rounded-[28px] p-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
+        <div className="relative bg-white/2.5 backdrop-blur-2xl border border-white/8 rounded-[28px] p-7 sm:p-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
 
           {/* Header */}
           <div className="flex flex-col items-center text-center mb-8">
@@ -201,7 +207,7 @@ export default function RegisterPage({ onNavigateToLogin }) {
 
           <button
             type="button"
-            onClick={onNavigateToLogin}
+            onClick={() => navigate('/login')}
             className="flex items-center justify-center gap-2 w-full border border-white/8 hover:border-white/[0.14] hover:bg-white/3 text-slate-300 hover:text-white text-[14px] font-medium py-3.5 rounded-xl transition-all duration-200"
           >
             <ArrowLeftIcon />
