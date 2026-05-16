@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, CloseIcon, PencilIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts, updateAccount } from '../services/accountService'
-import { logout } from '../services/authService'
 import { createCategory, deleteCategory, getCategories, updateCategory } from '../services/categoryService'
 import { importTransactions } from '../services/importService'
 import {
@@ -46,7 +47,9 @@ const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 
 const today = () => new Date().toISOString().split('T')[0]
 const emptyTxForm = () => ({ type: 'income', amount: '', category_id: '', description: '', date: today() })
 
-export default function DashboardPage({ user, onLogout }) {
+export default function DashboardPage() {
+  const { user, logout: contextLogout } = useAuth()
+  const navigate = useNavigate()
   const [accounts, setAccounts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -127,13 +130,8 @@ export default function DashboardPage({ user, onLogout }) {
   }, [selectedAccountId])
 
   useEffect(() => {
-    setImportResult(null)
-    setPendingClearAll(false)
-    clearTimeout(pendingClearAllTimerRef.current)
-    if (selectedAccountId === null) {
-      setTransactions([])
-      return
-    }
+    if (selectedAccountId === null) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingTx(true)
     getTransactions(selectedAccountId)
       .then(setTransactions)
@@ -164,6 +162,23 @@ export default function DashboardPage({ user, onLogout }) {
     return { income, expense, net: income - expense }
   }, [transactions])
 
+  const portfolioStats = useMemo(() => {
+    if (accounts.length === 0) return null
+    const totalBalance = accounts.reduce((s, a) => s + parseFloat(a.balance), 0)
+    const largest = accounts.reduce((max, a) => parseFloat(a.balance) > parseFloat(max.balance) ? a : max, accounts[0])
+    const avgBalance = totalBalance / accounts.length
+    const largestPct = totalBalance > 0 ? (parseFloat(largest.balance) / totalBalance) * 100 : 0
+    const typeCounts = accounts.reduce((acc, a) => {
+      const label = a.type === 'credit_card' ? 'credit' : a.type
+      acc[label] = (acc[label] || 0) + 1
+      return acc
+    }, {})
+    const typeBreakdown = Object.entries(typeCounts)
+      .map(([t, n]) => `${n} ${t}`)
+      .join(' · ')
+    return { totalBalance, largest, count: accounts.length, avgBalance, largestPct, typeBreakdown }
+  }, [accounts])
+
   const groupedTransactions = useMemo(() => {
     const map = new Map()
     for (const tx of transactions) {
@@ -174,8 +189,8 @@ export default function DashboardPage({ user, onLogout }) {
   }, [transactions])
 
   async function handleLogout() {
-    await logout().catch(() => {})
-    onLogout()
+    await contextLogout()
+    navigate('/login', { replace: true })
   }
 
   function handleFormChange(e) {
@@ -227,6 +242,10 @@ export default function DashboardPage({ user, onLogout }) {
     setPendingDeleteId(null)
     if (selectedAccountId === account.id) {
       setSelectedAccountId(null)
+      setTransactions([])
+      setImportResult(null)
+      setPendingClearAll(false)
+      clearTimeout(pendingClearAllTimerRef.current)
     }
     if (editingAccountId === account.id) {
       setEditingAccountId(null)
@@ -277,7 +296,12 @@ export default function DashboardPage({ user, onLogout }) {
   }
 
   function handleSelectAccount(account) {
-    setSelectedAccountId((prev) => (prev === account.id ? null : account.id))
+    const newId = selectedAccountId === account.id ? null : account.id
+    setSelectedAccountId(newId)
+    setImportResult(null)
+    setPendingClearAll(false)
+    clearTimeout(pendingClearAllTimerRef.current)
+    if (newId === null) setTransactions([])
     setShowAddTx(false)
     setTxForm(emptyTxForm())
     setPendingDeleteTxId(null)
@@ -596,12 +620,20 @@ export default function DashboardPage({ user, onLogout }) {
             </div>
             <span className="text-white font-bold text-[17px] tracking-tight">MoneyFlow</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <span className="text-slate-400 text-[13px] hidden sm:block">{user?.email}</span>
             <button
               type="button"
+              onClick={() => navigate('/analytics')}
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              <BarChartIcon />
+              <span className="hidden sm:inline">Analytics</span>
+            </button>
+            <button
+              type="button"
               onClick={handleLogout}
-              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
+              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
             >
               Logout
             </button>
@@ -610,7 +642,44 @@ export default function DashboardPage({ user, onLogout }) {
       </header>
 
       {/* Main content */}
-      <main className="relative max-w-5xl mx-auto px-6 py-10">
+      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+
+        {/* Portfolio summary */}
+        {!isLoading && portfolioStats && (
+          <div className="mb-10">
+          <h2 className="text-white text-[20px] font-semibold tracking-tight mb-4">Overview</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 relative overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ backgroundColor: '#60A5FA' }} />
+              <div className="pl-1">
+                <p className="text-slate-400 text-[10.5px] font-medium tracking-wide uppercase mb-1">Total Balance</p>
+                <p className="text-white text-[18px] font-bold tabular-nums leading-tight">
+                  ${portfolioStats.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-slate-500 text-[11px] mt-1">
+                  avg ${portfolioStats.avgBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per account
+                </p>
+              </div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 relative overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ backgroundColor: '#C084FC' }} />
+              <div className="pl-1">
+                <p className="text-slate-400 text-[10.5px] font-medium tracking-wide uppercase mb-1">Accounts</p>
+                <p className="text-white text-[18px] font-bold tabular-nums leading-tight">{portfolioStats.count}</p>
+                <p className="text-slate-500 text-[11px] mt-1">{portfolioStats.typeBreakdown}</p>
+              </div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 relative overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ backgroundColor: '#6EE7B7' }} />
+              <div className="pl-1">
+                <p className="text-slate-400 text-[10.5px] font-medium tracking-wide uppercase mb-1">Largest Account</p>
+                <p className="text-white text-[18px] font-bold leading-tight truncate">{portfolioStats.largest.name}</p>
+                <p className="text-slate-500 text-[11px] mt-1">{portfolioStats.largestPct.toFixed(0)}% of total balance</p>
+              </div>
+            </div>
+          </div>
+          </div>
+        )}
 
         {/* Section header */}
         <div className="flex items-center justify-between mb-6">
@@ -830,12 +899,12 @@ export default function DashboardPage({ user, onLogout }) {
             style={{ animation: 'fadeInUp 0.3s cubic-bezier(0.22,1,0.36,1) both' }}
           >
             {/* Panel header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/6">
+            <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b border-white/6 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-white text-[15px] font-semibold">
                 {selectedAccount.name}
                 <span className="text-slate-500 font-normal ml-2 text-[13px]">transactions</span>
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   ref={importFileRef}
                   type="file"
@@ -1116,21 +1185,21 @@ export default function DashboardPage({ user, onLogout }) {
             ) : (
               <>
                 {/* Summary strip */}
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 py-3 border-b border-white/6 bg-white/[0.01]">
+                <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-5 gap-y-2 px-4 sm:px-6 py-3 border-b border-white/6 bg-white/[0.01]">
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Income</span>
                     <span className="text-emerald-400 text-[13px] font-semibold tabular-nums">
                       +{txSummary.income.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div className="w-px h-3 bg-white/10" />
+                  <div className="hidden sm:block w-px h-3 bg-white/10" />
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Expenses</span>
                     <span className="text-red-400 text-[13px] font-semibold tabular-nums">
                       −{txSummary.expense.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div className="w-px h-3 bg-white/10" />
+                  <div className="hidden sm:block w-px h-3 bg-white/10" />
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Net</span>
                     <span className={`text-[13px] font-semibold tabular-nums ${txSummary.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -1149,7 +1218,7 @@ export default function DashboardPage({ user, onLogout }) {
                   return (
                     <div key={date}>
                       {/* Date header */}
-                      <div className="flex items-center gap-3 px-6 py-2 border-b border-white/4 bg-white/[0.008]">
+                      <div className="flex items-center gap-3 px-4 sm:px-6 py-2 border-b border-white/4 bg-white/[0.008]">
                         <span className="text-slate-400 text-[11.5px] font-semibold tracking-wide whitespace-nowrap">
                           {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
                             weekday: 'short', month: 'short', day: 'numeric',
@@ -1168,12 +1237,12 @@ export default function DashboardPage({ user, onLogout }) {
                             <li
                               key={tx.id}
                               className={`border-b border-white/4 last:border-0 transition-colors duration-150 ${
-                                isEditingTx ? 'px-6 py-4 bg-white/[0.02]' : 'px-6 py-3.5 hover:bg-white/[0.02] group'
+                                isEditingTx ? 'px-4 sm:px-6 py-4 bg-white/[0.02]' : 'px-4 sm:px-6 py-3.5 hover:bg-white/[0.02] group'
                               }`}
                             >
                               {isEditingTx ? (
                                 <form onSubmit={handleSaveTx} noValidate>
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
                                     <div>
                                       <label htmlFor={`edit-tx-type-${tx.id}`} className="block text-[10px] text-slate-500 mb-1">Type</label>
                                       <select id={`edit-tx-type-${tx.id}`} name="type" value={editTxForm.type} onChange={handleEditTxFormChange} className={compactInputClass}>

@@ -1,0 +1,483 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { useAuth } from '../context/AuthContext'
+import { CustomAreaTooltip, CustomBarTooltip } from '../components/AnalyticsTooltips'
+import DonutChart from '../components/DonutChart'
+import EmptyChart from '../components/EmptyChart'
+import { ArrowLeftIcon, TrendUpIcon } from '../components/Icons'
+import SummaryCard from '../components/SummaryCard'
+import { getAccounts } from '../services/accountService'
+import { getAllTransactions } from '../services/transactionService'
+
+const CHART_COLORS = [
+  '#6EE7B7', '#F87171', '#60A5FA', '#C084FC',
+  '#FBBF24', '#34D399', '#FB923C', '#A78BFA',
+]
+
+const PERIODS = [
+  { key: '7d', label: '7D' },
+  { key: '30d', label: '30D' },
+  { key: '3m', label: '3M' },
+  { key: '6m', label: '6M' },
+  { key: '1y', label: '1Y' },
+]
+
+function fmt(n) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export default function AnalyticsPage() {
+  const { user, logout: contextLogout } = useAuth()
+  const navigate = useNavigate()
+  const [period, setPeriod] = useState('30d')
+  const [accountId, setAccountId] = useState('all')
+  const [allTransactions, setAllTransactions] = useState([])
+  const [accounts, setAccounts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [donutView, setDonutView] = useState('expense')
+
+  useEffect(() => {
+    Promise.all([getAllTransactions(), getAccounts()])
+      .then(([txs, accs]) => { setAllTransactions(txs); setAccounts(accs) })
+      .catch((err) => setError(err.message || 'Failed to load data.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleLogout() {
+    await contextLogout()
+    navigate('/login', { replace: true })
+  }
+
+  const filteredTransactions = useMemo(() => {
+    const now = new Date()
+    const cutoff = new Date(now)
+    if (period === '7d')  cutoff.setDate(now.getDate() - 7)
+    if (period === '30d') cutoff.setDate(now.getDate() - 30)
+    if (period === '3m')  cutoff.setMonth(now.getMonth() - 3)
+    if (period === '6m')  cutoff.setMonth(now.getMonth() - 6)
+    if (period === '1y')  cutoff.setFullYear(now.getFullYear() - 1)
+    const cutoffStr = cutoff.toISOString().split('T')[0]
+    return allTransactions.filter((tx) => {
+      const matchAccount = accountId === 'all' || String(tx.account_id) === String(accountId)
+      return matchAccount && tx.date >= cutoffStr
+    })
+  }, [allTransactions, period, accountId])
+
+  const summaryStats = useMemo(() => {
+    let totalIncome = 0, totalExpenses = 0
+    for (const tx of filteredTransactions) {
+      const amt = parseFloat(tx.amount)
+      if (tx.type === 'income') totalIncome += amt
+      else totalExpenses += amt
+    }
+    const net = totalIncome - totalExpenses
+    const savingsRate = totalIncome > 0 ? (net / totalIncome) * 100 : 0
+    return { totalIncome, totalExpenses, net, savingsRate }
+  }, [filteredTransactions])
+
+  const barChartData = useMemo(() => {
+    const useWeekly = period === '7d' || period === '30d'
+    const buckets = new Map()
+    for (const tx of filteredTransactions) {
+      const d = new Date(tx.date + 'T00:00:00')
+      let key, label
+      if (useWeekly) {
+        const jan4 = new Date(d.getFullYear(), 0, 4)
+        const wk = Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7)
+        key = `${d.getFullYear()}-W${String(wk).padStart(2, '0')}`
+        label = `Wk ${wk}`
+      } else {
+        key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        label = d.toLocaleString('default', { month: 'short', year: '2-digit' })
+      }
+      if (!buckets.has(key)) buckets.set(key, { label, income: 0, expense: 0 })
+      const b = buckets.get(key)
+      if (tx.type === 'income') b.income += parseFloat(tx.amount)
+      else b.expense += parseFloat(tx.amount)
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => ({ ...v, income: +v.income.toFixed(2), expense: +v.expense.toFixed(2) }))
+  }, [filteredTransactions, period])
+
+  const donutData = useMemo(() => {
+    const map = new Map()
+    const relevant = filteredTransactions.filter((tx) => tx.type === donutView)
+    const total = relevant.reduce((s, tx) => s + parseFloat(tx.amount), 0)
+    for (const tx of relevant) {
+      const key = tx.category_name || 'Uncategorized'
+      if (!map.has(key)) map.set(key, { name: key, value: 0, count: 0 })
+      const cat = map.get(key)
+      cat.value += parseFloat(tx.amount)
+      cat.count++
+    }
+    const items = [...map.values()]
+      .sort((a, b) => b.value - a.value)
+      .map((item, i) => ({
+        ...item,
+        value: +item.value.toFixed(2),
+        color: CHART_COLORS[i % CHART_COLORS.length],
+        pct: total > 0 ? (item.value / total) * 100 : 0,
+      }))
+    return { items, total: +total.toFixed(2) }
+  }, [filteredTransactions, donutView])
+
+  const trendData = useMemo(() => {
+    const sorted = [...filteredTransactions].sort((a, b) => a.date.localeCompare(b.date))
+    let cumIncome = 0, cumExpense = 0
+    const points = []
+    const dailyExpense = new Map()
+    for (const tx of sorted) {
+      const amt = parseFloat(tx.amount)
+      if (tx.type === 'income') {
+        cumIncome += amt
+      } else {
+        cumExpense += amt
+        dailyExpense.set(tx.date, (dailyExpense.get(tx.date) || 0) + amt)
+      }
+      const last = points[points.length - 1]
+      if (last?.date === tx.date) {
+        last.cumIncome = +cumIncome.toFixed(2)
+        last.cumExpense = +cumExpense.toFixed(2)
+      } else {
+        points.push({ date: tx.date, cumIncome: +cumIncome.toFixed(2), cumExpense: +cumExpense.toFixed(2) })
+      }
+    }
+    let highestSpendDay = { date: null, amount: 0 }
+    for (const [date, amount] of dailyExpense) {
+      if (amount > highestSpendDay.amount) highestSpendDay = { date, amount: +amount.toFixed(2) }
+    }
+    const dayCount = Math.max(1, new Set(sorted.map((t) => t.date)).size)
+    const avgDailySpend = +(
+      sorted.filter((t) => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) / dayCount
+    ).toFixed(2)
+    return { points, highestSpendDay, avgDailySpend, txCount: filteredTransactions.length }
+  }, [filteredTransactions])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#020817] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#020817] flex flex-col items-center justify-center gap-4">
+        <p className="text-red-400 text-[14px]">{error}</p>
+        <button onClick={() => navigate('/dashboard')} className="text-blue-400 hover:text-blue-300 text-[13px]">
+          Back to Dashboard
+        </button>
+      </div>
+    )
+  }
+
+  const { totalIncome, totalExpenses, net, savingsRate } = summaryStats
+
+  return (
+    <div className="min-h-screen bg-[#020817] relative overflow-hidden">
+      {/* Ambient orbs */}
+      <div
+        className="absolute -top-32 -right-32 w-[640px] h-[640px] rounded-full bg-blue-600/10 blur-[130px] pointer-events-none"
+        style={{ animation: 'floatSlow 14s ease-in-out infinite' }}
+      />
+      <div
+        className="absolute -bottom-40 -left-40 w-[720px] h-[720px] rounded-full bg-violet-600/8 blur-[150px] pointer-events-none"
+        style={{ animation: 'floatSlow 18s ease-in-out infinite reverse' }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.08]"
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(148,163,184,0.5) 1px, transparent 1px)',
+          backgroundSize: '38px 38px',
+        }}
+      />
+
+      {/* Header */}
+      <header className="relative border-b border-white/6 bg-white/[0.02] backdrop-blur-xl px-6 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-blue-500/15 to-violet-500/15 border border-white/10">
+              <TrendUpIcon />
+            </div>
+            <span className="text-white font-bold text-[17px] tracking-tight">MoneyFlow</span>
+            <span className="text-slate-600 text-[14px] mx-1 hidden sm:inline">/</span>
+            <span className="text-slate-400 text-[14px] hidden sm:inline">Analytics</span>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-slate-400 text-[13px] hidden sm:block">{user?.email}</span>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              <ArrowLeftIcon />
+              <span className="hidden sm:inline">Dashboard</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main
+        className="relative max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8"
+        style={{ animation: 'fadeInUp 0.35s cubic-bezier(0.22,1,0.36,1) both' }}
+      >
+        {/* Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div>
+            <h2 className="text-white text-[20px] font-semibold tracking-tight">Financial Analytics</h2>
+            <p className="text-slate-500 text-[13px] mt-0.5">Insights from your transactions</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Period selector */}
+            <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1">
+              {PERIODS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPeriod(key)}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-200 ${
+                    period === key
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Account filter */}
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-slate-300 text-[13px] outline-none focus:border-blue-500/50 transition-colors cursor-pointer"
+            >
+              <option value="all">All Accounts</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={String(a.id)}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <SummaryCard
+            label="Total Income"
+            value={`$${fmt(totalIncome)}`}
+            accentColor="#6EE7B7"
+          />
+          <SummaryCard
+            label="Total Expenses"
+            value={`$${fmt(totalExpenses)}`}
+            accentColor="#F87171"
+          />
+          <SummaryCard
+            label="Net Savings"
+            value={
+              <span className={net < 0 ? 'text-red-400' : undefined}>
+                {net < 0 ? '-' : ''}${fmt(Math.abs(net))}
+              </span>
+            }
+            accentColor="#60A5FA"
+          />
+          <SummaryCard
+            label="Savings Rate"
+            value={`${savingsRate.toFixed(1)}%`}
+            sub={totalIncome === 0 ? 'No income recorded' : undefined}
+            accentColor="#C084FC"
+          />
+        </div>
+
+        {/* Chart 1: Income vs Expenses */}
+        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6 mb-6">
+          <h3 className="text-white text-[15px] font-semibold mb-5">Income vs Expenses</h3>
+          {filteredTransactions.length === 0 ? (
+            <EmptyChart />
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={barChartData} barCategoryGap="30%" barGap={4}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
+                  width={45}
+                />
+                <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                <Legend
+                  wrapperStyle={{ fontSize: '12px', color: '#94a3b8', paddingTop: '12px' }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+                <Bar dataKey="income" name="Income" fill="#6EE7B7" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="expense" name="Expenses" fill="#F87171" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Charts 2 & 3 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* Chart 2: Spending by Category */}
+          <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white text-[15px] font-semibold">
+                {donutView === 'expense' ? 'Spending' : 'Income'} by Category
+              </h3>
+              <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setDonutView('expense')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all duration-200 ${
+                    donutView === 'expense'
+                      ? 'bg-red-500/20 text-red-300'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Expenses
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDonutView('income')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all duration-200 ${
+                    donutView === 'income'
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Income
+                </button>
+              </div>
+            </div>
+            {donutData.items.length === 0 ? (
+              <EmptyChart className="h-[220px]" />
+            ) : (
+              <DonutChart items={donutData.items} total={donutData.total} />
+            )}
+          </div>
+
+          {/* Chart 3: Cash Flow Trend */}
+          <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6">
+            <h3 className="text-white text-[15px] font-semibold mb-4">Cash Flow Trend</h3>
+            {trendData.points.length === 0 ? (
+              <EmptyChart className="h-[220px]" />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={trendData.points} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6EE7B7" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#6EE7B7" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F87171" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#F87171" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: '#94a3b8', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    tickFormatter={(d) => d.slice(5)}
+                  />
+                  <YAxis
+                    tick={{ fill: '#94a3b8', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
+                    width={40}
+                  />
+                  <Tooltip content={<CustomAreaTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="cumIncome"
+                    name="Cumulative Income"
+                    stroke="#6EE7B7"
+                    strokeWidth={2}
+                    fill="url(#gradIncome)"
+                    dot={false}
+                    activeDot={{ r: 4, fill: '#6EE7B7' }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="cumExpense"
+                    name="Cumulative Expenses"
+                    stroke="#F87171"
+                    strokeWidth={2}
+                    fill="url(#gradExpense)"
+                    dot={false}
+                    activeDot={{ r: 4, fill: '#F87171' }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+            {/* Stat tiles */}
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="bg-white/4 rounded-xl p-3">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
+                  Highest Spend Day
+                </p>
+                {trendData.highestSpendDay.date ? (
+                  <>
+                    <p className="text-white text-[12px] font-semibold">{trendData.highestSpendDay.date.slice(5)}</p>
+                    <p className="text-red-400 text-[11px]">${fmt(trendData.highestSpendDay.amount)}</p>
+                  </>
+                ) : (
+                  <p className="text-slate-600 text-[12px]">—</p>
+                )}
+              </div>
+              <div className="bg-white/4 rounded-xl p-3">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
+                  Avg Daily Spend
+                </p>
+                <p className="text-white text-[12px] font-semibold">${fmt(trendData.avgDailySpend)}</p>
+              </div>
+              <div className="bg-white/4 rounded-xl p-3">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
+                  Transactions
+                </p>
+                <p className="text-white text-[12px] font-semibold">{trendData.txCount}</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+    </div>
+  )
+}

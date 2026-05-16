@@ -36,6 +36,11 @@ export async function deleteTransaction(id) {
   return handleResponse(response)
 }
 
+export async function getAllTransactions() {
+  const response = await fetch(`${BASE_URL}/transactions`, { credentials: 'include' })
+  return handleResponse(response)
+}
+
 export async function clearTransactions(accountId) {
   const response = await fetch(`${BASE_URL}/transactions?account_id=${accountId}`, {
     method: 'DELETE',

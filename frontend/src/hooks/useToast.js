@@ -5,8 +5,9 @@ export function useToast() {
   const timersRef = useRef({})
 
   useEffect(() => {
+    const timers = timersRef.current
     return () => {
-      Object.values(timersRef.current).forEach(clearTimeout)
+      Object.values(timers).forEach(clearTimeout)
     }
   }, [])
 

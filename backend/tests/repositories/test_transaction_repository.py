@@ -148,3 +148,73 @@ def test_delete_removes_transaction(db: Session) -> None:
     db.commit()
 
     assert transaction_repository.get_by_id(db, tx_id, user_id) is None
+
+
+def test_find_duplicate_returns_transaction_on_exact_match(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+    cat_id = _create_category(db)
+    today = date.today()
+    amount = Decimal("100.00")
+    _create_transaction(db, account.id, user_id, cat_id, TransactionType.income, amount)
+
+    result = transaction_repository.find_duplicate(
+        db, account.id, today, amount, TransactionType.income
+    )
+
+    assert result is not None
+
+
+def test_find_duplicate_returns_none_when_no_match(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+
+    result = transaction_repository.find_duplicate(
+        db, account.id, date.today(), Decimal("100.00"), TransactionType.income
+    )
+
+    assert result is None
+
+
+def test_find_duplicate_returns_none_for_different_type(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+    cat_id = _create_category(db)
+    amount = Decimal("100.00")
+    _create_transaction(db, account.id, user_id, cat_id, TransactionType.income, amount)
+
+    result = transaction_repository.find_duplicate(
+        db, account.id, date.today(), amount, TransactionType.expense
+    )
+
+    assert result is None
+
+
+def test_find_duplicate_returns_none_for_different_amount(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+    cat_id = _create_category(db)
+    _create_transaction(db, account.id, user_id, cat_id, amount=Decimal("100.00"))
+
+    result = transaction_repository.find_duplicate(
+        db, account.id, date.today(), Decimal("200.00"), TransactionType.income
+    )
+
+    assert result is None
+
+
+def test_delete_all_for_account_removes_only_that_accounts_transactions(db: Session) -> None:
+    user_id = _create_user(db)
+    acc1 = _create_account(db, user_id)
+    acc2 = account_repository.create(
+        db, user_id, "Savings", AccountType.savings, Decimal("0.00"), "USD"
+    )
+    cat_id = _create_category(db)
+    _create_transaction(db, acc1.id, user_id, cat_id)
+    _create_transaction(db, acc2.id, user_id, cat_id)
+
+    transaction_repository.delete_all_for_account(db, acc1.id, user_id)
+    db.commit()
+
+    assert transaction_repository.get_all(db, user_id, acc1.id) == []
+    assert len(transaction_repository.get_all(db, user_id, acc2.id)) == 1
