@@ -82,7 +82,7 @@ export default function RegisterPage() {
       >
         <div className="absolute inset-0 rounded-[28px] bg-linear-to-br from-violet-500/8 to-blue-500/8 blur-2xl scale-[1.06] pointer-events-none" />
 
-        <div className="relative bg-white/2.5 backdrop-blur-2xl border border-white/8 rounded-[28px] p-7 sm:p-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
+        <div className="relative bg-white/[0.025] backdrop-blur-2xl border border-white/8 rounded-[28px] p-7 sm:p-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
 
           {/* Header */}
           <div className="flex flex-col items-center text-center mb-8">
