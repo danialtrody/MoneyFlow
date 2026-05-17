@@ -72,7 +72,7 @@ export default function LoginPage() {
       >
         <div className="absolute inset-0 rounded-[28px] bg-linear-to-br from-blue-500/8 to-violet-500/8 blur-2xl scale-[1.06] pointer-events-none" />
 
-        <div className="relative bg-white/2.5 backdrop-blur-2xl border border-white/8 rounded-[28px] p-7 sm:p-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
+        <div className="relative bg-white/[0.025] backdrop-blur-2xl border border-white/8 rounded-[28px] p-7 sm:p-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
 
           {/* Header */}
           <div className="flex flex-col items-center text-center mb-9">
@@ -107,14 +107,7 @@ export default function LoginPage() {
                 <label htmlFor="login-password" className="block text-[12.5px] font-medium text-slate-300 tracking-wide">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => addToast('error', 'Password reset is not yet available.')}
-                  className="text-[12px] text-blue-400 hover:text-blue-300 transition-colors duration-150"
-                >
-                  Forgot password?
-                </button>
-              </div>
+                </div>
               <div className="relative">
                 <input
                   id="login-password"

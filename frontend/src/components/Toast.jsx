@@ -24,7 +24,7 @@ function ToastItem({ toast, onRemove }) {
 
   return (
     <div
-      className={`relative flex items-start gap-3 w-85 bg-white/4 backdrop-blur-2xl border ${c.border} rounded-2xl px-4 py-3.5 shadow-[0_24px_64px_-8px_rgba(0,0,0,0.65)] pointer-events-auto overflow-hidden`}
+      className={`relative flex items-start gap-3 w-[min(340px,calc(100vw-32px))] bg-white/4 backdrop-blur-2xl border ${c.border} rounded-2xl px-4 py-3.5 shadow-[0_24px_64px_-8px_rgba(0,0,0,0.65)] pointer-events-auto overflow-hidden`}
       style={{ animation: 'toastIn 0.4s cubic-bezier(0.22,1,0.36,1) both' }}
       role="alert"
     >

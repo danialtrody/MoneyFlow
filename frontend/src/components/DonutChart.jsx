@@ -9,9 +9,9 @@ export default function DonutChart({ items, total }) {
   const [activeIndex, setActiveIndex] = useState(null)
 
   return (
-    <div className="flex flex-col sm:flex-row gap-4 items-start">
+    <div className="flex flex-col gap-4">
       {/* Donut */}
-      <div className="relative flex-shrink-0 w-full sm:w-[200px] h-[220px]">
+      <div className="relative mx-auto w-[200px] h-[220px]" onMouseLeave={() => setActiveIndex(null)}>
         <ResponsiveContainer width="100%" height={220}>
           <PieChart>
             <Pie
@@ -41,7 +41,7 @@ export default function DonutChart({ items, total }) {
           {activeIndex !== null ? (
             <>
               <span
-                className="text-[10px] font-semibold text-center leading-tight max-w-[100px] line-clamp-2"
+                className="text-[10px] font-semibold text-center leading-tight max-w-[130px] line-clamp-2"
                 style={{ color: items[activeIndex].color }}
               >
                 {items[activeIndex].name}
@@ -63,27 +63,25 @@ export default function DonutChart({ items, total }) {
       </div>
 
       {/* Ranked list */}
-      <div className="flex-1 overflow-y-auto max-h-[180px] sm:max-h-[220px] space-y-1 pr-1">
+      <div className="relative overflow-hidden" style={{ height: '260px' }}>
+        <div className="category-list overflow-y-scroll h-full space-y-1 pr-1">
         {items.map((item, i) => (
           <div
             key={item.name}
             className={`flex items-center gap-2 py-1 rounded-lg px-1 transition-colors ${activeIndex === i ? 'bg-white/6' : ''}`}
           >
+            <span className="text-slate-500 text-[10px] w-7 flex-shrink-0">{item.pct.toFixed(0)}%</span>
+            <span className="text-white text-[11px] font-medium tabular-nums flex-shrink-0">${fmt(item.value)}</span>
+            <span className="text-slate-300 text-[11px] flex-1 min-w-0 text-right leading-snug">{item.name}</span>
             <div
               className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: item.color }}
             />
-            <span className="text-slate-300 text-[11px] flex-1 truncate min-w-0">{item.name}</span>
-            <span className="text-white text-[11px] font-medium tabular-nums flex-shrink-0">${fmt(item.value)}</span>
-            <div className="hidden sm:block w-12 bg-white/8 rounded-full h-1 flex-shrink-0">
-              <div
-                className="h-1 rounded-full"
-                style={{ width: `${item.pct}%`, backgroundColor: item.color }}
-              />
-            </div>
-            <span className="hidden sm:block text-slate-500 text-[10px] w-7 text-right flex-shrink-0">{item.pct.toFixed(0)}%</span>
           </div>
         ))}
+        </div>
+        {/* Fade hint — indicates more rows below */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#0f1423]/90 to-transparent" />
       </div>
     </div>
   )

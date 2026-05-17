@@ -39,6 +39,29 @@ select option {
   color: #f1f5f9;
 }
 
+input[type="date"] {
+  color-scheme: dark;
+}
+
+.category-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+.category-list::-webkit-scrollbar {
+  width: 5px;
+}
+.category-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+.category-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 4px;
+}
+.category-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
 * {
   box-sizing: border-box;
 }

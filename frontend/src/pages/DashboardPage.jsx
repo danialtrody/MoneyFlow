@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, TrashIcon, TrendUpIcon } from '../components/Icons'
+import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, ReceiptIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts, updateAccount } from '../services/accountService'
@@ -46,6 +46,19 @@ const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 
 
 const today = () => new Date().toISOString().split('T')[0]
 const emptyTxForm = () => ({ type: 'income', amount: '', category_id: '', description: '', date: today() })
+
+function fmtCurrency(amount, currency) {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency || 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(parseFloat(amount))
+  } catch {
+    return `${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+  }
+}
 
 export default function DashboardPage() {
   const { user, logout: contextLogout } = useAuth()
@@ -176,7 +189,9 @@ export default function DashboardPage() {
     const typeBreakdown = Object.entries(typeCounts)
       .map(([t, n]) => `${n} ${t}`)
       .join(' · ')
-    return { totalBalance, largest, count: accounts.length, avgBalance, largestPct, typeBreakdown }
+    const currencies = [...new Set(accounts.map((a) => a.currency))]
+    const currency = currencies.length === 1 ? currencies[0] : 'USD'
+    return { totalBalance, largest, count: accounts.length, avgBalance, largestPct, typeBreakdown, currency }
   }, [accounts])
 
   const groupedTransactions = useMemo(() => {
@@ -185,7 +200,7 @@ export default function DashboardPage() {
       if (!map.has(tx.date)) map.set(tx.date, [])
       map.get(tx.date).push(tx)
     }
-    return [...map.entries()]
+    return [...map.entries()].sort(([a], [b]) => b.localeCompare(a))
   }, [transactions])
 
   async function handleLogout() {
@@ -654,10 +669,10 @@ export default function DashboardPage() {
               <div className="pl-1">
                 <p className="text-slate-400 text-[10.5px] font-medium tracking-wide uppercase mb-1">Total Balance</p>
                 <p className="text-white text-[18px] font-bold tabular-nums leading-tight">
-                  ${portfolioStats.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {fmtCurrency(portfolioStats.totalBalance, portfolioStats.currency)}
                 </p>
                 <p className="text-slate-500 text-[11px] mt-1">
-                  avg ${portfolioStats.avgBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per account
+                  avg {fmtCurrency(portfolioStats.avgBalance, portfolioStats.currency)} per account
                 </p>
               </div>
             </div>
@@ -771,13 +786,16 @@ export default function DashboardPage() {
         {isLoading ? (
           <div className="text-slate-500 text-[14px] text-center py-20">Loading…</div>
         ) : accounts.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-slate-400 text-[15px] mb-1">No accounts yet.</p>
-            <p className="text-slate-600 text-[13px]">Add your first account to get started.</p>
+          <div className="text-center py-20 flex flex-col items-center gap-3">
+            <span className="text-slate-700"><WalletIcon /></span>
+            <div>
+              <p className="text-slate-400 text-[15px] mb-1">No accounts yet.</p>
+              <p className="text-slate-600 text-[13px]">Add your first account to get started.</p>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {accounts.map((account) => {
+            {accounts.map((account, index) => {
               const isEditing = editingAccountId === account.id
               return (
                 <div
@@ -789,7 +807,7 @@ export default function DashboardPage() {
                   className={`relative bg-linear-to-br ${TYPE_COLORS[account.type] ?? 'from-slate-500/20 to-slate-600/10 border-slate-500/20'} border rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 ${
                     isEditing ? '' : 'cursor-pointer hover:scale-[1.01]'
                   } ${selectedAccountId === account.id ? 'ring-2 ring-blue-500/50' : ''}`}
-                  style={{ animation: 'fadeInUp 0.4s cubic-bezier(0.22,1,0.36,1) both' }}
+                  style={{ animation: 'fadeInUp 0.4s cubic-bezier(0.22,1,0.36,1) both', animationDelay: `${index * 60}ms` }}
                 >
                   {isEditing ? (
                     <form
@@ -878,11 +896,7 @@ export default function DashboardPage() {
                       </div>
                       <p className="text-white font-semibold text-[16px] mb-1 truncate">{account.name}</p>
                       <p className="text-slate-300 text-[22px] font-bold tracking-tight">
-                        {parseFloat(account.balance).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                        <span className="text-slate-500 text-[13px] font-normal ml-1.5">{account.currency}</span>
+                        {fmtCurrency(account.balance, account.currency)}
                       </p>
                     </>
                   )}
@@ -1179,7 +1193,8 @@ export default function DashboardPage() {
             {loadingTx ? (
               <div className="text-slate-500 text-[13px] text-center py-12">Loading…</div>
             ) : transactions.length === 0 ? (
-              <div className="text-center py-12">
+              <div className="text-center py-12 flex flex-col items-center gap-2">
+                <span className="text-slate-700"><ReceiptIcon /></span>
                 <p className="text-slate-500 text-[13px]">No transactions yet for this account.</p>
               </div>
             ) : (
@@ -1210,6 +1225,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Grouped by date */}
+                <div className="category-list overflow-y-auto max-h-[540px]">
                 {groupedTransactions.map(([date, txs]) => {
                   const dayNet = txs.reduce(
                     (sum, t) => sum + (t.type === 'income' ? parseFloat(t.amount) : -parseFloat(t.amount)),
@@ -1321,11 +1337,6 @@ export default function DashboardPage() {
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2">
                                         <p className="text-white text-[13.5px] font-medium truncate">{tx.category_name}</p>
-                                        <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                                          tx.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                                        }`}>
-                                          {tx.type === 'income' ? 'Income' : 'Expense'}
-                                        </span>
                                       </div>
                                       {tx.description && (
                                         <p className="text-slate-600 text-[11px] truncate mt-0.5">{tx.description}</p>
@@ -1373,6 +1384,7 @@ export default function DashboardPage() {
                     </div>
                   )
                 })}
+                </div>
               </>
             )}
           </div>

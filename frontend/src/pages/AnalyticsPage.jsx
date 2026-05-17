@@ -32,10 +32,20 @@ const PERIODS = [
   { key: '3m', label: '3M' },
   { key: '6m', label: '6M' },
   { key: '1y', label: '1Y' },
+  { key: '3y', label: '3Y' },
 ]
 
-function fmt(n) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function fmtCurrency(amount, currency) {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency || 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(parseFloat(amount))
+  } catch {
+    return `${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+  }
 }
 
 export default function AnalyticsPage() {
@@ -69,6 +79,7 @@ export default function AnalyticsPage() {
     if (period === '3m')  cutoff.setMonth(now.getMonth() - 3)
     if (period === '6m')  cutoff.setMonth(now.getMonth() - 6)
     if (period === '1y')  cutoff.setFullYear(now.getFullYear() - 1)
+    if (period === '3y')  cutoff.setFullYear(now.getFullYear() - 3)
     const cutoffStr = cutoff.toISOString().split('T')[0]
     return allTransactions.filter((tx) => {
       const matchAccount = accountId === 'all' || String(tx.account_id) === String(accountId)
@@ -87,6 +98,12 @@ export default function AnalyticsPage() {
     const savingsRate = totalIncome > 0 ? (net / totalIncome) * 100 : 0
     return { totalIncome, totalExpenses, net, savingsRate }
   }, [filteredTransactions])
+
+  const dominantCurrency = useMemo(() => {
+    if (accounts.length === 0) return 'USD'
+    const currencies = [...new Set(accounts.map((a) => a.currency))]
+    return currencies.length === 1 ? currencies[0] : 'USD'
+  }, [accounts])
 
   const barChartData = useMemo(() => {
     const useWeekly = period === '7d' || period === '30d'
@@ -134,6 +151,17 @@ export default function AnalyticsPage() {
       }))
     return { items, total: +total.toFixed(2) }
   }, [filteredTransactions, donutView])
+
+  const extraStats = useMemo(() => {
+    let largestExpense = 0, largestIncome = 0
+    let expenseCount = 0, incomeCount = 0
+    for (const tx of filteredTransactions) {
+      const amt = parseFloat(tx.amount)
+      if (tx.type === 'expense') { expenseCount++; if (amt > largestExpense) largestExpense = amt }
+      else { incomeCount++; if (amt > largestIncome) largestIncome = amt }
+    }
+    return { largestExpense, largestIncome, expenseCount, incomeCount }
+  }, [filteredTransactions])
 
   const trendData = useMemo(() => {
     const sorted = [...filteredTransactions].sort((a, b) => a.date.localeCompare(b.date))
@@ -252,7 +280,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {/* Period selector */}
-            <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1">
+            <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 flex-shrink-0">
               {PERIODS.map(({ key, label }) => (
                 <button
                   key={key}
@@ -286,19 +314,19 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <SummaryCard
             label="Total Income"
-            value={`$${fmt(totalIncome)}`}
+            value={fmtCurrency(totalIncome, dominantCurrency)}
             accentColor="#6EE7B7"
           />
           <SummaryCard
             label="Total Expenses"
-            value={`$${fmt(totalExpenses)}`}
+            value={fmtCurrency(totalExpenses, dominantCurrency)}
             accentColor="#F87171"
           />
           <SummaryCard
             label="Net Savings"
             value={
               <span className={net < 0 ? 'text-red-400' : undefined}>
-                {net < 0 ? '-' : ''}${fmt(Math.abs(net))}
+                {net < 0 ? '-' : ''}{fmtCurrency(Math.abs(net), dominantCurrency)}
               </span>
             }
             accentColor="#60A5FA"
@@ -446,7 +474,7 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             )}
             {/* Stat tiles */}
-            <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
               <div className="bg-white/4 rounded-xl p-3">
                 <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
                   Highest Spend Day
@@ -454,7 +482,7 @@ export default function AnalyticsPage() {
                 {trendData.highestSpendDay.date ? (
                   <>
                     <p className="text-white text-[12px] font-semibold">{trendData.highestSpendDay.date.slice(5)}</p>
-                    <p className="text-red-400 text-[11px]">${fmt(trendData.highestSpendDay.amount)}</p>
+                    <p className="text-red-400 text-[11px]">{fmtCurrency(trendData.highestSpendDay.amount, dominantCurrency)}</p>
                   </>
                 ) : (
                   <p className="text-slate-600 text-[12px]">—</p>
@@ -464,13 +492,41 @@ export default function AnalyticsPage() {
                 <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
                   Avg Daily Spend
                 </p>
-                <p className="text-white text-[12px] font-semibold">${fmt(trendData.avgDailySpend)}</p>
+                <p className="text-white text-[12px] font-semibold">{fmtCurrency(trendData.avgDailySpend, dominantCurrency)}</p>
               </div>
-              <div className="bg-white/4 rounded-xl p-3">
+              <div className="bg-white/4 rounded-xl p-3 col-span-2 sm:col-span-1">
                 <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
                   Transactions
                 </p>
                 <p className="text-white text-[12px] font-semibold">{trendData.txCount}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+              <div className="bg-white/4 rounded-xl p-3">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
+                  Largest Expense
+                </p>
+                <p className="text-red-400 text-[12px] font-semibold">
+                  {extraStats.largestExpense > 0 ? fmtCurrency(extraStats.largestExpense, dominantCurrency) : '—'}
+                </p>
+              </div>
+              <div className="bg-white/4 rounded-xl p-3">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
+                  Largest Income
+                </p>
+                <p className="text-emerald-400 text-[12px] font-semibold">
+                  {extraStats.largestIncome > 0 ? fmtCurrency(extraStats.largestIncome, dominantCurrency) : '—'}
+                </p>
+              </div>
+              <div className="bg-white/4 rounded-xl p-3 col-span-2 sm:col-span-1">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
+                  In / Out
+                </p>
+                <p className="text-white text-[12px] font-semibold">
+                  <span className="text-emerald-400">{extraStats.incomeCount}</span>
+                  <span className="text-slate-500 mx-1">/</span>
+                  <span className="text-red-400">{extraStats.expenseCount}</span>
+                </p>
               </div>
             </div>
           </div>
