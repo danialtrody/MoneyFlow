@@ -5,7 +5,7 @@ function fmt(n) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function DonutChart({ items, total, currency = '' }) {
+export default function DonutChart({ items, total, currency = '', onCategoryClick }) {
   const [activeIndex, setActiveIndex] = useState(null)
 
   return (
@@ -25,6 +25,8 @@ export default function DonutChart({ items, total, currency = '' }) {
               strokeWidth={0}
               onMouseEnter={(_, index) => setActiveIndex(index)}
               onMouseLeave={() => setActiveIndex(null)}
+              onClick={(_, index) => onCategoryClick?.(items[index])}
+              cursor={onCategoryClick ? 'pointer' : undefined}
             >
               {items.map((entry, i) => (
                 <Cell
@@ -68,7 +70,8 @@ export default function DonutChart({ items, total, currency = '' }) {
         {items.map((item, i) => (
           <div
             key={item.name}
-            className={`flex items-center gap-2 py-1 rounded-lg px-1 transition-colors ${activeIndex === i ? 'bg-white/6' : ''}`}
+            className={`flex items-center gap-2 py-1 rounded-lg px-1 transition-colors cursor-pointer hover:bg-white/[0.08] ${activeIndex === i ? 'bg-white/6' : ''}`}
+            onClick={() => onCategoryClick?.(item)}
           >
             <span className="text-slate-500 text-[10px] w-7 flex-shrink-0">{item.pct.toFixed(0)}%</span>
             <span className="text-white text-[11px] font-medium tabular-nums flex-shrink-0">{fmt(item.value)}{currency ? ` ${currency}` : ''}</span>

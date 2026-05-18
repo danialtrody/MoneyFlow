@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, ReceiptIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
 import Toast from '../components/Toast'
+import TransactionsModal from '../components/TransactionsModal'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts, updateAccount } from '../services/accountService'
 import { createCategory, deleteCategory, getCategories, updateCategory } from '../services/categoryService'
@@ -96,6 +97,7 @@ export default function DashboardPage() {
   const [editingTxId, setEditingTxId] = useState(null)
   const [editTxForm, setEditTxForm] = useState({ type: 'income', amount: '', category_id: '', description: '', date: '' })
   const [isSubmittingEditTx, setIsSubmittingEditTx] = useState(false)
+  const [selectedTx, setSelectedTx] = useState(null)
 
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
@@ -492,6 +494,7 @@ export default function DashboardPage() {
   }
 
   function handleStartEditTx(tx) {
+    setSelectedTx(null)
     setEditingTxId(tx.id)
     setEditTxForm({
       type: tx.type,
@@ -1255,8 +1258,9 @@ export default function DashboardPage() {
                             <li
                               key={tx.id}
                               className={`border-b border-white/4 last:border-0 transition-colors duration-150 ${
-                                isEditingTx ? 'px-4 sm:px-6 py-4 bg-white/[0.02]' : 'px-4 sm:px-6 py-3.5 hover:bg-white/[0.02] group'
+                                isEditingTx ? 'px-4 sm:px-6 py-4 bg-white/[0.02]' : 'px-4 sm:px-6 py-3.5 hover:bg-white/[0.02] group cursor-pointer'
                               }`}
+                              onClick={isEditingTx ? undefined : () => setSelectedTx(tx)}
                             >
                               {isEditingTx ? (
                                 <form onSubmit={handleSaveTx} noValidate>
@@ -1354,7 +1358,7 @@ export default function DashboardPage() {
                                       })}
                                       <span className="text-slate-500 text-[11px] font-normal ml-1">{selectedAccount.currency}</span>
                                     </span>
-                                    <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+                                    <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150" onClick={(e) => e.stopPropagation()}>
                                       <button
                                         type="button"
                                         onClick={() => handleStartEditTx(tx)}
@@ -1394,6 +1398,15 @@ export default function DashboardPage() {
       </main>
 
       <Toast toasts={toasts} removeToast={removeToast} />
+
+      <TransactionsModal
+        title={selectedTx ? (selectedTx.category_name) : null}
+        subtitle={selectedTx ? new Date(selectedTx.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }) : null}
+        accentColor={selectedTx?.type === 'income' ? '#6EE7B7' : selectedTx?.type === 'expense' ? '#F87171' : '#94a3b8'}
+        transactions={selectedTx ? [selectedTx] : []}
+        currency={selectedAccount?.currency}
+        onClose={() => setSelectedTx(null)}
+      />
     </div>
   )
 }
