@@ -9,7 +9,6 @@ services:
     name: moneyflow-backend
     runtime: python
     rootDir: backend
-    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -32,7 +31,6 @@ services:
     name: moneyflow-frontend
     runtime: static
     rootDir: frontend
-    plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
