@@ -11,13 +11,12 @@ class AccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     type: AccountType
     balance: Decimal = Field(default=Decimal("0.00"))
-    currency: str = Field(default="USD", max_length=10)
+    currency: str = Field(default="ILS", max_length=10)
 
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     type: Optional[AccountType] = None
-    balance: Optional[Decimal] = None
     currency: Optional[str] = Field(default=None, max_length=10)
 
 

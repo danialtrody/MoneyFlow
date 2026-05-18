@@ -27,16 +27,20 @@ function PublicRoute({ children }) {
   return children
 }
 
-function AppRoutes() {
+function WildcardRoute() {
   const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  return <Navigate to={user ? '/dashboard' : '/login'} replace />
+}
 
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-      <Route path="*" element={loading ? <LoadingScreen /> : <Navigate to={user ? '/dashboard' : '/login'} replace />} />
+      <Route path="*" element={<WildcardRoute />} />
     </Routes>
   )
 }

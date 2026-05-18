@@ -12,6 +12,7 @@ from services import user_service
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+_COOKIE_MAX_AGE: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")) * 60
 
 
 @router.post(
@@ -51,6 +52,7 @@ def login(
         httponly=True,
         samesite="lax",
         secure=_COOKIE_SECURE,
+        max_age=_COOKIE_MAX_AGE,
     )
     return UserResponse.model_validate(user)
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from enums import TransactionType
 from models.category import Category
+from models.transaction import Transaction
 from repositories import account_repository, category_repository, transaction_repository
 from schemas.import_schema import ImportResponse, RowError
 from schemas.transaction import TransactionCreate
@@ -256,16 +257,31 @@ def import_transactions(
         cat_name = _extract_category_name(description) if description else _FALLBACK_CATEGORY
         category = _resolve_category(db, user_id, cat_name, tx_type, cat_cache)
 
-        data = TransactionCreate(
-            account_id=account_id,
-            type=tx_type,
-            amount=amount,
-            category_id=category.id,
-            description=description,
-            date=parsed_date,
-        )
         try:
-            transaction_service.create_transaction(db, user_id, data)
+            if tx_type == TransactionType.transfer:
+                # Bypass the public-API schema (which rejects transfer) and
+                # create the row directly — transfer transactions don't touch balance.
+                tx = Transaction(
+                    account_id=account_id,
+                    user_id=user_id,
+                    type=tx_type,
+                    amount=amount,
+                    category_id=category.id,
+                    description=description,
+                    date=parsed_date,
+                )
+                transaction_repository.add(db, tx)
+                db.commit()
+            else:
+                data = TransactionCreate(
+                    account_id=account_id,
+                    type=tx_type,
+                    amount=amount,
+                    category_id=category.id,
+                    description=description,
+                    date=parsed_date,
+                )
+                transaction_service.create_transaction(db, user_id, data)
             imported += 1
         except ValueError as exc:
             errors.append(RowError(row=row_num, reason=str(exc)))

@@ -26,7 +26,7 @@ export function CustomAreaTooltip({ active, payload, label }) {
       <p className="text-slate-400 mb-1.5 font-medium">{label}</p>
       {income && <p className="text-emerald-400 font-semibold">Income: {fmt(income.value)}</p>}
       {expense && <p className="text-red-400 font-semibold">Expenses: {fmt(expense.value)}</p>}
-      <p className={`mt-1 font-semibold {net >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>
+      <p className={`mt-1 font-semibold ${net >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>
         Net: {fmt(net)}
       </p>
     </div>

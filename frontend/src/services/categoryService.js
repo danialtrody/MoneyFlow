@@ -35,5 +35,6 @@ export async function deleteCategory(id) {
     method: 'DELETE',
     credentials: 'include',
   })
+  if (res.status === 204) return
   return handleResponse(res)
 }

@@ -29,6 +29,10 @@ export default function RegisterPage() {
       addToast('error', 'Please fill in all fields.')
       return
     }
+    if (!email.includes('@') || !email.includes('.')) {
+      addToast('error', 'Please enter a valid email address.')
+      return
+    }
     if (password.length < 8) {
       addToast('error', 'Password must be at least 8 characters.')
       return
