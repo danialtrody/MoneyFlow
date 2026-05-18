@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from routers import accounts, auth, categories, import_router, transactions
 
@@ -49,3 +50,10 @@ app.include_router(import_router.router)
 @app.get("/health")
 def health() -> JSONResponse:
     return JSONResponse(status_code=200, content={"status": "ok"})
+
+
+_frontend_dist = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'dist'
+)
+if os.path.exists(_frontend_dist):
+    app.mount('/', StaticFiles(directory=_frontend_dist, html=True), name='frontend')
