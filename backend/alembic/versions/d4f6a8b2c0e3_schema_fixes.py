@@ -19,12 +19,12 @@ depends_on: Union[str, None] = None
 
 def upgrade() -> None:
     op.drop_constraint(
-        'transactions_category_id_fkey',
+        'fk_transactions_category_id_categories',
         'transactions',
         type_='foreignkey',
     )
     op.create_foreign_key(
-        'transactions_category_id_fkey',
+        'fk_transactions_category_id_categories',
         'transactions',
         'categories',
         ['category_id'],
@@ -51,12 +51,12 @@ def downgrade() -> None:
     )
 
     op.drop_constraint(
-        'transactions_category_id_fkey',
+        'fk_transactions_category_id_categories',
         'transactions',
         type_='foreignkey',
     )
     op.create_foreign_key(
-        'transactions_category_id_fkey',
+        'fk_transactions_category_id_categories',
         'transactions',
         'categories',
         ['category_id'],
