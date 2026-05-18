@@ -8,7 +8,9 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 load_dotenv()
 
-DATABASE_URL: str = os.environ["DATABASE_URL"]
+DATABASE_URL: str = os.environ["DATABASE_URL"].replace(
+    "postgres://", "postgresql://", 1
+)
 
 engine = create_engine(DATABASE_URL)
 
