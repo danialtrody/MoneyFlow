@@ -219,6 +219,7 @@ export default function DashboardPage() {
 
   async function handleAddAccount(e) {
     e.preventDefault()
+    if (isSubmitting) return
     if (!form.name.trim()) {
       addToast('error', 'Account name is required.')
       return
@@ -285,6 +286,7 @@ export default function DashboardPage() {
 
   async function handleSaveAccount(e) {
     e.preventDefault()
+    if (isSubmittingEditAccount) return
     if (!editAccountForm.name.trim()) {
       addToast('error', 'Account name is required.')
       return
@@ -335,6 +337,7 @@ export default function DashboardPage() {
   }
 
   async function handleAddCategory() {
+    if (isSubmittingCat) return
     if (!newCatForm.name.trim()) {
       addToast('error', 'Category name is required.')
       return
@@ -380,6 +383,7 @@ export default function DashboardPage() {
 
   async function handleAddTransaction(e) {
     e.preventDefault()
+    if (isSubmittingTx) return
     if (!txForm.category_id) {
       addToast('error', 'Category is required.')
       return
@@ -442,6 +446,7 @@ export default function DashboardPage() {
   }
 
   async function handleSaveRenameCategory() {
+    if (isRenamingCat) return
     if (!renameCatName.trim()) {
       addToast('error', 'Category name is required.')
       return
@@ -512,6 +517,7 @@ export default function DashboardPage() {
 
   async function handleSaveTx(e) {
     e.preventDefault()
+    if (isSubmittingEditTx) return
     if (!editTxForm.category_id) {
       addToast('error', 'Category is required.')
       return
@@ -1200,21 +1206,21 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Income</span>
                     <span className="text-emerald-400 text-[13px] font-semibold tabular-nums">
-                      +{txSummary.income.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      +{fmtCurrency(txSummary.income, selectedAccount?.currency)}
                     </span>
                   </div>
                   <div className="hidden sm:block w-px h-3 bg-white/10" />
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Expenses</span>
                     <span className="text-red-400 text-[13px] font-semibold tabular-nums">
-                      −{txSummary.expense.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      −{fmtCurrency(txSummary.expense, selectedAccount?.currency)}
                     </span>
                   </div>
                   <div className="hidden sm:block w-px h-3 bg-white/10" />
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Net</span>
                     <span className={`text-[13px] font-semibold tabular-nums ${txSummary.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {txSummary.net >= 0 ? '+' : '−'}{Math.abs(txSummary.net).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {txSummary.net >= 0 ? '+' : '−'}{fmtCurrency(Math.abs(txSummary.net), selectedAccount?.currency)}
                     </span>
                   </div>
                   <span className="ml-auto text-slate-600 text-[11px]">{transactions.length} transactions</span>

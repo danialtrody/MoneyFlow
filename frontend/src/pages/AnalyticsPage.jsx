@@ -186,7 +186,7 @@ export default function AnalyticsPage() {
     for (const [date, amount] of dailyExpense) {
       if (amount > highestSpendDay.amount) highestSpendDay = { date, amount: +amount.toFixed(2) }
     }
-    const dayCount = Math.max(1, new Set(sorted.map((t) => t.date)).size)
+    const dayCount = Math.max(1, new Set(sorted.filter((t) => t.type !== 'transfer').map((t) => t.date)).size)
     const avgDailySpend = +(
       sorted.filter((t) => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) / dayCount
     ).toFixed(2)
@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
     return (
       <div className="min-h-screen bg-[#020817] flex flex-col items-center justify-center gap-4">
         <p className="text-red-400 text-[14px]">{error}</p>
-        <button onClick={() => navigate('/dashboard')} className="text-blue-400 hover:text-blue-300 text-[13px]">
+        <button type="button" onClick={() => navigate('/dashboard')} className="text-blue-400 hover:text-blue-300 text-[13px]">
           Back to Dashboard
         </button>
       </div>
@@ -340,7 +340,7 @@ export default function AnalyticsPage() {
         {/* Chart 1: Income vs Expenses */}
         <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6 mb-6">
           <h3 className="text-white text-[15px] font-semibold mb-5">Income vs Expenses</h3>
-          {filteredTransactions.length === 0 ? (
+          {barChartData.length === 0 ? (
             <EmptyChart />
           ) : (
             <ResponsiveContainer width="100%" height={280}>

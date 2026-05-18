@@ -3,10 +3,12 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from enums import TransactionType
 from schemas.category import CategoryResponse
+
+_PUBLIC_TYPES = {TransactionType.income, TransactionType.expense}
 
 
 class TransactionCreate(BaseModel):
@@ -17,6 +19,13 @@ class TransactionCreate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=500)
     date: DateType = Field(default_factory=DateType.today)
 
+    @field_validator("type")
+    @classmethod
+    def type_must_be_public(cls, v: TransactionType) -> TransactionType:
+        if v not in _PUBLIC_TYPES:
+            raise ValueError("type must be income or expense")
+        return v
+
 
 class TransactionUpdate(BaseModel):
     type: Optional[TransactionType] = None
@@ -24,6 +33,13 @@ class TransactionUpdate(BaseModel):
     category_id: Optional[int] = None
     description: Optional[str] = Field(default=None, max_length=500)
     date: Optional[DateType] = None
+
+    @field_validator("type")
+    @classmethod
+    def type_must_be_public(cls, v: Optional[TransactionType]) -> Optional[TransactionType]:
+        if v is not None and v not in _PUBLIC_TYPES:
+            raise ValueError("type must be income or expense")
+        return v
 
 
 class TransactionResponse(BaseModel):

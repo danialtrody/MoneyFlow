@@ -52,9 +52,17 @@ def update_transaction(
     if transaction is None:
         raise ValueError("Transaction not found")
 
+    final_type = data.type if data.type is not None else transaction.type
     if data.category_id is not None:
-        if category_repository.get_by_id(db, data.category_id) is None:
+        category = category_repository.get_by_id(db, data.category_id)
+        if category is None:
             raise ValueError("Category not found")
+        if category.type != final_type:
+            raise ValueError("Category type does not match transaction type")
+    elif data.type is not None:
+        existing_cat = category_repository.get_by_id(db, transaction.category_id)
+        if existing_cat is not None and existing_cat.type != final_type:
+            raise ValueError("Category type does not match transaction type")
 
     account = account_repository.get_by_id(db, transaction.account_id, user_id)
     if account is None:

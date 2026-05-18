@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { login } from '../services/authService'
@@ -17,9 +17,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { toasts, addToast, removeToast } = useToast()
-  const timerRef = useRef(null)
-
-  useEffect(() => () => clearTimeout(timerRef.current), [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -30,8 +27,8 @@ export default function LoginPage() {
     setIsLoading(true)
     try {
       const userData = await login(email, password)
-      addToast('success', 'Welcome back! You are now signed in.')
-      timerRef.current = setTimeout(() => setUser(userData), 1200)
+      setUser(userData)
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       addToast('error', err.message || 'Invalid email or password.')
     } finally {
