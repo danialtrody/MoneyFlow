@@ -14,7 +14,9 @@ import {
 } from 'recharts'
 import { useAuth } from '../context/AuthContext'
 import { CustomAreaTooltip, CustomBarTooltip } from '../components/AnalyticsTooltips'
+import CategoryModal from '../components/CategoryModal'
 import DonutChart from '../components/DonutChart'
+import TransactionsModal from '../components/TransactionsModal'
 import EmptyChart from '../components/EmptyChart'
 import { ArrowLeftIcon, TrendUpIcon } from '../components/Icons'
 import SummaryCard from '../components/SummaryCard'
@@ -25,6 +27,16 @@ const CHART_COLORS = [
   '#6EE7B7', '#F87171', '#60A5FA', '#C084FC',
   '#FBBF24', '#34D399', '#FB923C', '#A78BFA',
 ]
+
+function barLabel(dateStr, useWeekly) {
+  const d = new Date(dateStr + 'T00:00:00')
+  if (useWeekly) {
+    const jan4 = new Date(d.getFullYear(), 0, 4)
+    const wk = Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7)
+    return `Wk ${wk}`
+  }
+  return d.toLocaleString('default', { month: 'short', year: '2-digit' })
+}
 
 const PERIODS = [
   { key: '7d', label: '7D' },
@@ -54,6 +66,8 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [donutView, setDonutView] = useState('expense')
+  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [selectedModal, setSelectedModal] = useState(null)
 
   useEffect(() => {
     Promise.all([getAllTransactions(), getAccounts()])
@@ -62,11 +76,50 @@ export default function AnalyticsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  function openDayModal(date) {
+    const txs = filteredTransactions
+      .filter((tx) => tx.date === date)
+      .sort((a, b) => b.date.localeCompare(a.date))
+    const formatted = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    setSelectedModal({ title: formatted, subtitle: 'All transactions on this day', transactions: txs })
+  }
+
+  function handleTrendClick(data) {
+    if (!data?.activePayload?.[0]?.payload?.date) return
+    openDayModal(data.activePayload[0].payload.date)
+  }
+
+  function handleSummaryClick(type) {
+    const txs = filteredTransactions
+      .filter((tx) => tx.type === type)
+      .sort((a, b) => b.date.localeCompare(a.date))
+    const title = type === 'income' ? 'Total Income' : 'Total Expenses'
+    setSelectedModal({ title, subtitle: `All ${type} transactions`, transactions: txs, accentColor: type === 'income' ? '#6EE7B7' : '#F87171' })
+  }
+
+  function handleBarClick(data) {
+    if (!data?.activeLabel) return
+    const label = data.activeLabel
+    const useWeekly = period === '7d' || period === '30d'
+    const txs = filteredTransactions
+      .filter((tx) => tx.type !== 'transfer' && barLabel(tx.date, useWeekly) === label)
+      .sort((a, b) => b.date.localeCompare(a.date))
+    setSelectedModal({ title: label, subtitle: 'All transactions for this period', transactions: txs })
+  }
+
+  function handleCategoryClick(item) {
+    const txs = filteredTransactions
+      .filter((tx) => (tx.category_name || 'Uncategorized') === item.name && tx.type === donutView)
+      .sort((a, b) => b.date.localeCompare(a.date))
+    setSelectedCategory({ name: item.name, color: item.color, total: item.value, transactions: txs })
+  }
+
   async function handleLogout() {
     await contextLogout()
     navigate('/login', { replace: true })
   }
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filteredTransactions = useMemo(() => {
     const now = new Date()
     const cutoff = new Date(now)
@@ -107,16 +160,10 @@ export default function AnalyticsPage() {
     for (const tx of filteredTransactions) {
       if (tx.type === 'transfer') continue
       const d = new Date(tx.date + 'T00:00:00')
-      let key, label
-      if (useWeekly) {
-        const jan4 = new Date(d.getFullYear(), 0, 4)
-        const wk = Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7)
-        key = `${d.getFullYear()}-W${String(wk).padStart(2, '0')}`
-        label = `Wk ${wk}`
-      } else {
-        key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        label = d.toLocaleString('default', { month: 'short', year: '2-digit' })
-      }
+      const label = barLabel(tx.date, useWeekly)
+      const key = useWeekly
+        ? `${d.getFullYear()}-W${String(Math.ceil(((d - new Date(d.getFullYear(), 0, 4)) / 86400000 + new Date(d.getFullYear(), 0, 4).getDay() + 1) / 7)).padStart(2, '0')}`
+        : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
       if (!buckets.has(key)) buckets.set(key, { label, income: 0, expense: 0 })
       const b = buckets.get(key)
       if (tx.type === 'income') b.income += parseFloat(tx.amount)
@@ -310,16 +357,20 @@ export default function AnalyticsPage() {
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <SummaryCard
-            label="Total Income"
-            value={fmtCurrency(totalIncome, dominantCurrency)}
-            accentColor="#6EE7B7"
-          />
-          <SummaryCard
-            label="Total Expenses"
-            value={fmtCurrency(totalExpenses, dominantCurrency)}
-            accentColor="#F87171"
-          />
+          <button type="button" className="text-left cursor-pointer hover:scale-[1.02] transition-transform duration-200" onClick={() => handleSummaryClick('income')}>
+            <SummaryCard
+              label="Total Income"
+              value={fmtCurrency(totalIncome, dominantCurrency)}
+              accentColor="#6EE7B7"
+            />
+          </button>
+          <button type="button" className="text-left cursor-pointer hover:scale-[1.02] transition-transform duration-200" onClick={() => handleSummaryClick('expense')}>
+            <SummaryCard
+              label="Total Expenses"
+              value={fmtCurrency(totalExpenses, dominantCurrency)}
+              accentColor="#F87171"
+            />
+          </button>
           <SummaryCard
             label="Net Savings"
             value={
@@ -344,7 +395,7 @@ export default function AnalyticsPage() {
             <EmptyChart />
           ) : (
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={barChartData} barCategoryGap="30%" barGap={4}>
+              <BarChart data={barChartData} barCategoryGap="30%" barGap={4} onClick={handleBarClick} style={{ cursor: 'pointer' }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -409,7 +460,7 @@ export default function AnalyticsPage() {
             {donutData.items.length === 0 ? (
               <EmptyChart className="h-[220px]" />
             ) : (
-              <DonutChart items={donutData.items} total={donutData.total} currency={dominantCurrency} />
+              <DonutChart items={donutData.items} total={donutData.total} currency={dominantCurrency} onCategoryClick={handleCategoryClick} />
             )}
           </div>
 
@@ -420,7 +471,7 @@ export default function AnalyticsPage() {
               <EmptyChart className="h-[220px]" />
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={trendData.points} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                <AreaChart data={trendData.points} margin={{ top: 5, right: 5, left: 0, bottom: 0 }} onClick={handleTrendClick} style={{ cursor: 'pointer' }}>
                   <defs>
                     <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#6EE7B7" stopOpacity={0.3} />
@@ -473,7 +524,10 @@ export default function AnalyticsPage() {
             )}
             {/* Stat tiles */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
-              <div className="bg-white/4 rounded-xl p-3">
+              <div
+                className={`bg-white/4 rounded-xl p-3 ${trendData.highestSpendDay.date ? 'cursor-pointer hover:bg-white/[0.08] transition-colors' : ''}`}
+                onClick={trendData.highestSpendDay.date ? () => openDayModal(trendData.highestSpendDay.date) : undefined}
+              >
                 <p className="text-slate-500 text-[10px] uppercase tracking-wide leading-tight mb-1">
                   Highest Spend Day
                 </p>
@@ -531,6 +585,21 @@ export default function AnalyticsPage() {
 
         </div>
       </main>
+
+      <CategoryModal
+        category={selectedCategory}
+        currency={dominantCurrency}
+        onClose={() => setSelectedCategory(null)}
+      />
+
+      <TransactionsModal
+        title={selectedModal?.title ?? null}
+        subtitle={selectedModal?.subtitle}
+        accentColor={selectedModal?.accentColor}
+        transactions={selectedModal?.transactions ?? []}
+        currency={dominantCurrency}
+        onClose={() => setSelectedModal(null)}
+      />
 
     </div>
   )
