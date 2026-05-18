@@ -36,16 +36,12 @@ const PERIODS = [
 ]
 
 function fmtCurrency(amount, currency) {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(parseFloat(amount))
-  } catch {
-    return `${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-  }
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(parseFloat(amount))
+  return currency ? `${formatted} ${currency}` : formatted
 }
 
 export default function AnalyticsPage() {
@@ -92,7 +88,7 @@ export default function AnalyticsPage() {
     for (const tx of filteredTransactions) {
       const amt = parseFloat(tx.amount)
       if (tx.type === 'income') totalIncome += amt
-      else totalExpenses += amt
+      else if (tx.type === 'expense') totalExpenses += amt
     }
     const net = totalIncome - totalExpenses
     const savingsRate = totalIncome > 0 ? (net / totalIncome) * 100 : 0
@@ -100,15 +96,16 @@ export default function AnalyticsPage() {
   }, [filteredTransactions])
 
   const dominantCurrency = useMemo(() => {
-    if (accounts.length === 0) return 'USD'
+    if (accounts.length === 0) return 'ILS'
     const currencies = [...new Set(accounts.map((a) => a.currency))]
-    return currencies.length === 1 ? currencies[0] : 'USD'
+    return currencies.length === 1 ? currencies[0] : 'ILS'
   }, [accounts])
 
   const barChartData = useMemo(() => {
     const useWeekly = period === '7d' || period === '30d'
     const buckets = new Map()
     for (const tx of filteredTransactions) {
+      if (tx.type === 'transfer') continue
       const d = new Date(tx.date + 'T00:00:00')
       let key, label
       if (useWeekly) {
@@ -123,7 +120,7 @@ export default function AnalyticsPage() {
       if (!buckets.has(key)) buckets.set(key, { label, income: 0, expense: 0 })
       const b = buckets.get(key)
       if (tx.type === 'income') b.income += parseFloat(tx.amount)
-      else b.expense += parseFloat(tx.amount)
+      else if (tx.type === 'expense') b.expense += parseFloat(tx.amount)
     }
     return [...buckets.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -158,7 +155,7 @@ export default function AnalyticsPage() {
     for (const tx of filteredTransactions) {
       const amt = parseFloat(tx.amount)
       if (tx.type === 'expense') { expenseCount++; if (amt > largestExpense) largestExpense = amt }
-      else { incomeCount++; if (amt > largestIncome) largestIncome = amt }
+      else if (tx.type === 'income') { incomeCount++; if (amt > largestIncome) largestIncome = amt }
     }
     return { largestExpense, largestIncome, expenseCount, incomeCount }
   }, [filteredTransactions])
@@ -169,10 +166,11 @@ export default function AnalyticsPage() {
     const points = []
     const dailyExpense = new Map()
     for (const tx of sorted) {
+      if (tx.type === 'transfer') continue
       const amt = parseFloat(tx.amount)
       if (tx.type === 'income') {
         cumIncome += amt
-      } else {
+      } else if (tx.type === 'expense') {
         cumExpense += amt
         dailyExpense.set(tx.date, (dailyExpense.get(tx.date) || 0) + amt)
       }
@@ -192,7 +190,7 @@ export default function AnalyticsPage() {
     const avgDailySpend = +(
       sorted.filter((t) => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) / dayCount
     ).toFixed(2)
-    return { points, highestSpendDay, avgDailySpend, txCount: filteredTransactions.length }
+    return { points, highestSpendDay, avgDailySpend, txCount: filteredTransactions.filter((t) => t.type !== 'transfer').length }
   }, [filteredTransactions])
 
   if (loading) {
@@ -411,7 +409,7 @@ export default function AnalyticsPage() {
             {donutData.items.length === 0 ? (
               <EmptyChart className="h-[220px]" />
             ) : (
-              <DonutChart items={donutData.items} total={donutData.total} />
+              <DonutChart items={donutData.items} total={donutData.total} currency={dominantCurrency} />
             )}
           </div>
 

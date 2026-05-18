@@ -37,7 +37,7 @@ def create_transaction(
 
     if data.type == TransactionType.income:
         account.balance += data.amount
-    else:
+    elif data.type == TransactionType.expense:
         account.balance -= data.amount
 
     db.commit()
@@ -62,7 +62,7 @@ def update_transaction(
 
     if transaction.type == TransactionType.income:
         account.balance -= transaction.amount
-    else:
+    elif transaction.type == TransactionType.expense:
         account.balance += transaction.amount
 
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -70,7 +70,7 @@ def update_transaction(
 
     if transaction.type == TransactionType.income:
         account.balance += transaction.amount
-    else:
+    elif transaction.type == TransactionType.expense:
         account.balance -= transaction.amount
 
     db.commit()
@@ -87,7 +87,7 @@ def clear_account_transactions(db: Session, account_id: int, user_id: int) -> No
     for tx in transactions:
         if tx.type == TransactionType.income:
             account.balance -= tx.amount
-        else:
+        elif tx.type == TransactionType.expense:
             account.balance += tx.amount
 
     transaction_repository.delete_all_for_account(db, account_id, user_id)
@@ -105,7 +105,7 @@ def delete_transaction(db: Session, id: int, user_id: int) -> None:
 
     if transaction.type == TransactionType.income:
         account.balance -= transaction.amount
-    else:
+    elif transaction.type == TransactionType.expense:
         account.balance += transaction.amount
 
     transaction_repository.delete(db, transaction)

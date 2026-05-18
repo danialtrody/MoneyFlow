@@ -224,7 +224,22 @@ def import_transactions(
         debit_amount = _parse_amount(_get_cell(row, debit_idx)) if debit_idx is not None else None
         credit_amount = _parse_amount(_get_cell(row, credit_idx)) if credit_idx is not None else None
 
-        if debit_amount is not None:
+        ext = _get_cell(row, ext_desc_idx)
+        desc = _get_cell(row, desc_idx)
+        description: Optional[str] = (ext if ext else desc) or None
+        if description:
+            description = description[:500]
+
+        # Internal bank operations (e.g. securities) — store but don't affect balance
+        is_internal = description is not None and "שם נייר ערך" in description
+
+        if is_internal:
+            amount = debit_amount or credit_amount
+            if amount is None:
+                skipped += 1
+                continue
+            tx_type = TransactionType.transfer
+        elif debit_amount is not None:
             amount = debit_amount
             tx_type = TransactionType.expense
         elif credit_amount is not None:
@@ -233,12 +248,6 @@ def import_transactions(
         else:
             skipped += 1
             continue
-
-        ext = _get_cell(row, ext_desc_idx)
-        desc = _get_cell(row, desc_idx)
-        description: Optional[str] = (ext if ext else desc) or None
-        if description:
-            description = description[:500]
 
         if transaction_repository.find_duplicate(db, account_id, parsed_date, amount, tx_type):
             skipped += 1

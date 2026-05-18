@@ -5,7 +5,7 @@ function fmt(n) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function DonutChart({ items, total }) {
+export default function DonutChart({ items, total, currency = '' }) {
   const [activeIndex, setActiveIndex] = useState(null)
 
   return (
@@ -21,7 +21,7 @@ export default function DonutChart({ items, total }) {
               cy="50%"
               innerRadius={62}
               outerRadius={90}
-              paddingAngle={2}
+              paddingAngle={items.length > 12 ? 0 : 2}
               strokeWidth={0}
               onMouseEnter={(_, index) => setActiveIndex(index)}
               onMouseLeave={() => setActiveIndex(null)}
@@ -47,7 +47,7 @@ export default function DonutChart({ items, total }) {
                 {items[activeIndex].name}
               </span>
               <span className="text-white text-[15px] font-bold tabular-nums mt-0.5">
-                ${fmt(items[activeIndex].value)}
+                {fmt(items[activeIndex].value)}{currency ? ` ${currency}` : ''}
               </span>
               <span className="text-slate-400 text-[10px]">
                 {items[activeIndex].pct.toFixed(1)}%
@@ -56,7 +56,7 @@ export default function DonutChart({ items, total }) {
           ) : (
             <>
               <span className="text-slate-400 text-[10px] uppercase tracking-wide">Total</span>
-              <span className="text-white text-[16px] font-bold tabular-nums">${fmt(total)}</span>
+              <span className="text-white text-[16px] font-bold tabular-nums">{fmt(total)}{currency ? ` ${currency}` : ''}</span>
             </>
           )}
         </div>
@@ -71,7 +71,7 @@ export default function DonutChart({ items, total }) {
             className={`flex items-center gap-2 py-1 rounded-lg px-1 transition-colors ${activeIndex === i ? 'bg-white/6' : ''}`}
           >
             <span className="text-slate-500 text-[10px] w-7 flex-shrink-0">{item.pct.toFixed(0)}%</span>
-            <span className="text-white text-[11px] font-medium tabular-nums flex-shrink-0">${fmt(item.value)}</span>
+            <span className="text-white text-[11px] font-medium tabular-nums flex-shrink-0">{fmt(item.value)}{currency ? ` ${currency}` : ''}</span>
             <span className="text-slate-300 text-[11px] flex-1 min-w-0 text-right leading-snug">{item.name}</span>
             <div
               className="w-2 h-2 rounded-full flex-shrink-0"

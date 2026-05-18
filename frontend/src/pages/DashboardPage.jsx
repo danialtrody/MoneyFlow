@@ -42,22 +42,18 @@ const inputClass =
 const compactInputClass =
   'w-full bg-white/4 border border-white/8 rounded-lg px-3 py-2 text-white text-[12px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50'
 
-const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 'USD' }
+const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 'ILS' }
 
 const today = () => new Date().toISOString().split('T')[0]
 const emptyTxForm = () => ({ type: 'income', amount: '', category_id: '', description: '', date: today() })
 
 function fmtCurrency(amount, currency) {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(parseFloat(amount))
-  } catch {
-    return `${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-  }
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(parseFloat(amount))
+  return currency ? `${formatted} ${currency}` : formatted
 }
 
 export default function DashboardPage() {
@@ -94,7 +90,7 @@ export default function DashboardPage() {
   const [isRenamingCat, setIsRenamingCat] = useState(false)
 
   const [editingAccountId, setEditingAccountId] = useState(null)
-  const [editAccountForm, setEditAccountForm] = useState({ name: '', type: 'bank', currency: 'USD' })
+  const [editAccountForm, setEditAccountForm] = useState({ name: '', type: 'bank', currency: 'ILS' })
   const [isSubmittingEditAccount, setIsSubmittingEditAccount] = useState(false)
 
   const [editingTxId, setEditingTxId] = useState(null)
@@ -170,7 +166,7 @@ export default function DashboardPage() {
     for (const tx of transactions) {
       const amt = parseFloat(tx.amount)
       if (tx.type === 'income') income += amt
-      else expense += amt
+      else if (tx.type === 'expense') expense += amt
     }
     return { income, expense, net: income - expense }
   }, [transactions])
@@ -190,7 +186,7 @@ export default function DashboardPage() {
       .map(([t, n]) => `${n} ${t}`)
       .join(' · ')
     const currencies = [...new Set(accounts.map((a) => a.currency))]
-    const currency = currencies.length === 1 ? currencies[0] : 'USD'
+    const currency = currencies.length === 1 ? currencies[0] : 'ILS'
     return { totalBalance, largest, count: accounts.length, avgBalance, largestPct, typeBreakdown, currency }
   }, [accounts])
 
@@ -233,7 +229,7 @@ export default function DashboardPage() {
         name: form.name.trim(),
         type: form.type,
         balance: parseFloat(form.balance) || 0,
-        currency: form.currency.trim() || 'USD',
+        currency: form.currency.trim() || 'ILS',
       })
       setAccounts((prev) => [...prev, account])
       setForm(EMPTY_ACCOUNT_FORM)
@@ -298,7 +294,7 @@ export default function DashboardPage() {
       const updated = await updateAccount(editingAccountId, {
         name: editAccountForm.name.trim(),
         type: editAccountForm.type,
-        currency: editAccountForm.currency.trim() || 'USD',
+        currency: editAccountForm.currency.trim() || 'ILS',
       })
       setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
       setEditingAccountId(null)
@@ -765,7 +761,7 @@ export default function DashboardPage() {
                     name="currency"
                     value={form.currency}
                     onChange={handleFormChange}
-                    placeholder="USD"
+                    placeholder="ILS"
                     maxLength={10}
                     className={inputClass}
                   />
@@ -843,7 +839,7 @@ export default function DashboardPage() {
                           name="currency"
                           value={editAccountForm.currency}
                           onChange={handleEditAccountFormChange}
-                          placeholder="USD"
+                          placeholder="ILS"
                           maxLength={10}
                           className={compactInputClass}
                         />
@@ -1228,7 +1224,7 @@ export default function DashboardPage() {
                 <div className="category-list overflow-y-auto max-h-[540px]">
                 {groupedTransactions.map(([date, txs]) => {
                   const dayNet = txs.reduce(
-                    (sum, t) => sum + (t.type === 'income' ? parseFloat(t.amount) : -parseFloat(t.amount)),
+                    (sum, t) => sum + (t.type === 'income' ? parseFloat(t.amount) : t.type === 'expense' ? -parseFloat(t.amount) : 0),
                     0,
                   )
                   return (
@@ -1333,7 +1329,7 @@ export default function DashboardPage() {
                               ) : (
                                 <div className="flex items-center justify-between gap-4">
                                   <div className="flex items-center gap-3 min-w-0">
-                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tx.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tx.type === 'income' ? 'bg-emerald-500' : tx.type === 'expense' ? 'bg-red-500' : 'bg-slate-500'}`} />
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2">
                                         <p className="text-white text-[13.5px] font-medium truncate">{tx.category_name}</p>
@@ -1344,8 +1340,8 @@ export default function DashboardPage() {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
-                                    <span className={`text-[14px] font-bold tabular-nums ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                      {tx.type === 'income' ? '+' : '−'}
+                                    <span className={`text-[14px] font-bold tabular-nums ${tx.type === 'income' ? 'text-emerald-400' : tx.type === 'expense' ? 'text-red-400' : 'text-slate-400'}`}>
+                                      {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}
                                       {parseFloat(tx.amount).toLocaleString('en-US', {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2,
