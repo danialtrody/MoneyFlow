@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import get_current_user
 from models.user import User
-from schemas.user import LoginRequest, UserCreate, UserResponse
+from schemas.user import LoginRequest, UserCreate, UserResponse, UserUpdate
 from services import user_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -61,6 +61,19 @@ def login(
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.put("/me", response_model=UserResponse)
+def update_me(
+    data: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    try:
+        user = user_service.update_profile(db, current_user, data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return UserResponse.model_validate(user)
 
 
 @router.post("/logout", response_model=dict[str, str])
