@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, ReceiptIcon, SearchIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
+import { ArrowRightIcon, BarChartIcon, ChevronDownIcon, CloseIcon, MenuIcon, PencilIcon, ReceiptIcon, SearchIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
+import EditProfileModal from '../components/EditProfileModal'
 import Toast from '../components/Toast'
 import TransactionsModal from '../components/TransactionsModal'
+import WelcomeBanner from '../components/WelcomeBanner'
 import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts, updateAccount } from '../services/accountService'
 import { createCategory, deleteCategory, getCategories, updateCategory } from '../services/categoryService'
@@ -111,6 +113,8 @@ export default function DashboardPage() {
 
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isClearingAll, setIsClearingAll] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
 
   const { toasts, addToast, removeToast } = useToast()
 
@@ -652,42 +656,134 @@ export default function DashboardPage() {
       />
 
       {/* Top bar */}
-      <header className="relative border-b border-white/6 bg-white/[0.02] backdrop-blur-xl px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+      <header className="relative border-b border-white/6 bg-white/[0.02] backdrop-blur-xl px-6">
+        {/* Main row */}
+        <div className="max-w-5xl mx-auto flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-blue-500/15 to-violet-500/15 border border-white/10">
               <TrendUpIcon />
             </div>
             <span className="text-white font-bold text-[17px] tracking-tight">MoneyFlow</span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <span className="text-slate-400 text-[13px] hidden sm:block">{user?.email}</span>
+
+          {/* Desktop actions */}
+          <div className="hidden sm:flex items-center gap-3">
             <button
               type="button"
               onClick={() => navigate('/analytics')}
-              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
             >
               <BarChartIcon />
-              <span className="hidden sm:inline">Analytics</span>
+              Analytics
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEditProfile(true)}
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              <PencilIcon />
+              Edit Profile
             </button>
             <button
               type="button"
               onClick={handleLogout}
-              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
             >
               Logout
             </button>
           </div>
+
+          {/* Mobile quick actions + hamburger */}
+          <div className="sm:hidden">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => navigate('/analytics')}
+                className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-3 py-1.5 rounded-lg transition-all duration-200"
+              >
+                Analytics
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu((m) => !m)}
+                className="text-slate-400 hover:text-white transition-colors duration-150 p-2 rounded-lg hover:bg-white/[0.04]"
+                aria-label="Toggle menu"
+              >
+                {showMobileMenu ? <CloseIcon /> : <MenuIcon />}
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Mobile collapsible menu */}
+        {showMobileMenu && (
+          <div
+            className="sm:hidden border-t border-white/8 max-w-5xl mx-auto pb-3 pt-2"
+            style={{ animation: 'slideDown 0.18s cubic-bezier(0.22,1,0.36,1) both' }}
+          >
+            {/* User info strip */}
+            <div className="flex items-center gap-3 px-2 py-3 mb-1">
+              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-linear-to-br from-blue-500/30 to-violet-500/30 border border-white/10 text-white font-semibold text-[13px] flex-shrink-0">
+                {(user?.full_name || user?.email || '?')[0].toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-white text-[13px] font-medium truncate">{user?.full_name}</p>
+                <p className="text-slate-500 text-[11px] truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            {/* Nav items */}
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => { setShowEditProfile(true); setShowMobileMenu(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.05] group-hover:bg-white/10 transition-colors duration-150">
+                  <PencilIcon />
+                </span>
+                Edit Profile
+                <span className="ml-auto"><ArrowRightIcon /></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { navigate('/analytics'); setShowMobileMenu(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.05] group-hover:bg-white/10 transition-colors duration-150">
+                  <BarChartIcon />
+                </span>
+                Analytics
+                <ArrowRightIcon />
+              </button>
+            </div>
+
+            {/* Divider + Logout */}
+            <div className="mt-2 pt-2 border-t border-white/6">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-red-400 hover:text-red-300 hover:bg-red-500/[0.08] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-500/10 group-hover:bg-red-500/15 transition-colors duration-150">
+                  <ArrowRightIcon />
+                </span>
+                Logout
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main content */}
-      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 pb-6 sm:pb-10">
+        <WelcomeBanner user={user} />
 
         {/* Portfolio summary */}
         {!isLoading && portfolioStats && (
           <div className="mb-10">
-          <h2 className="text-white text-[20px] font-semibold tracking-tight mb-4">Overview</h2>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 relative overflow-hidden">
               <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ backgroundColor: '#60A5FA' }} />
@@ -1259,13 +1355,13 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="hidden sm:block w-px h-3 bg-white/10" />
-                  <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-2">
                     <span className="text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">Net</span>
                     <span className={`text-[13px] font-semibold tabular-nums ${txSummary.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {txSummary.net >= 0 ? '+' : '−'}{fmtCurrency(Math.abs(txSummary.net), selectedAccount?.currency)}
                     </span>
                   </div>
-                  <span className="ml-auto text-slate-600 text-[11px]">
+                  <span className="ml-auto hidden sm:block text-slate-600 text-[11px]">
                     {hasActiveFilters
                       ? `${filteredTransactions.length} of ${transactions.length} transactions`
                       : `${transactions.length} transactions`}
@@ -1605,6 +1701,13 @@ export default function DashboardPage() {
         currency={selectedAccount?.currency}
         onClose={() => setSelectedTx(null)}
       />
+
+      {showEditProfile && (
+        <EditProfileModal
+          onClose={() => setShowEditProfile(false)}
+          addToast={addToast}
+        />
+      )}
     </div>
   )
 }

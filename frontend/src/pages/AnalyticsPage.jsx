@@ -16,10 +16,13 @@ import { useAuth } from '../context/AuthContext'
 import { CustomAreaTooltip, CustomBarTooltip } from '../components/AnalyticsTooltips'
 import CategoryModal from '../components/CategoryModal'
 import DonutChart from '../components/DonutChart'
+import EditProfileModal from '../components/EditProfileModal'
 import TransactionsModal from '../components/TransactionsModal'
 import EmptyChart from '../components/EmptyChart'
-import { ArrowLeftIcon, TrendUpIcon } from '../components/Icons'
+import { ArrowLeftIcon, ArrowRightIcon, CloseIcon, MenuIcon, PencilIcon, TrendUpIcon } from '../components/Icons'
 import SummaryCard from '../components/SummaryCard'
+import Toast from '../components/Toast'
+import { useToast } from '../hooks/useToast'
 import { getAccounts } from '../services/accountService'
 import { getAllTransactions } from '../services/transactionService'
 
@@ -68,6 +71,9 @@ export default function AnalyticsPage() {
   const [donutView, setDonutView] = useState('expense')
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedModal, setSelectedModal] = useState(null)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const { toasts, addToast, removeToast } = useToast()
 
   useEffect(() => {
     Promise.all([getAllTransactions(), getAccounts()])
@@ -281,35 +287,128 @@ export default function AnalyticsPage() {
       />
 
       {/* Header */}
-      <header className="relative border-b border-white/6 bg-white/[0.02] backdrop-blur-xl px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+      <header className="relative border-b border-white/6 bg-white/[0.02] backdrop-blur-xl px-6">
+        {/* Main row */}
+        <div className="max-w-6xl mx-auto flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-blue-500/15 to-violet-500/15 border border-white/10">
               <TrendUpIcon />
             </div>
-            <span className="text-white font-bold text-[17px] tracking-tight">MoneyFlow</span>
-            <span className="text-slate-600 text-[14px] mx-1 hidden sm:inline">/</span>
-            <span className="text-slate-400 text-[14px] hidden sm:inline">Analytics</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-white font-bold text-[17px] tracking-tight">MoneyFlow</span>
+              <span className="text-slate-600 text-[14px] hidden sm:inline">/</span>
+              <span className="text-slate-400 text-[14px] hidden sm:inline">Analytics</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-slate-400 text-[13px] hidden sm:block">{user?.email}</span>
+
+          {/* Desktop actions */}
+          <div className="hidden sm:flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEditProfile(true)}
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              <PencilIcon />
+              Edit Profile
+            </button>
             <button
               type="button"
               onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
             >
               <ArrowLeftIcon />
-              <span className="hidden sm:inline">Dashboard</span>
+              Dashboard
             </button>
             <button
               type="button"
               onClick={handleLogout}
-              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-2.5 sm:px-4 py-1.5 rounded-lg transition-all duration-200"
+              className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
             >
               Logout
             </button>
           </div>
+
+          {/* Mobile hamburger */}
+          <div className="sm:hidden">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard')}
+                className="text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-3 py-1.5 rounded-lg transition-all duration-200"
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu((m) => !m)}
+                className="text-slate-400 hover:text-white transition-colors duration-150 p-2 rounded-lg hover:bg-white/[0.04]"
+                aria-label="Toggle menu"
+              >
+                {showMobileMenu ? <CloseIcon /> : <MenuIcon />}
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Mobile collapsible menu */}
+        {showMobileMenu && (
+          <div
+            className="sm:hidden border-t border-white/8 max-w-6xl mx-auto pb-3 pt-2"
+            style={{ animation: 'slideDown 0.18s cubic-bezier(0.22,1,0.36,1) both' }}
+          >
+            {/* User info strip */}
+            <div className="flex items-center gap-3 px-2 py-3 mb-1">
+              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-linear-to-br from-blue-500/30 to-violet-500/30 border border-white/10 text-white font-semibold text-[13px] flex-shrink-0">
+                {(user?.full_name || user?.email || '?')[0].toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-white text-[13px] font-medium truncate">{user?.full_name}</p>
+                <p className="text-slate-500 text-[11px] truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            {/* Nav items */}
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => { setShowEditProfile(true); setShowMobileMenu(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.05] group-hover:bg-white/10 transition-colors duration-150">
+                  <PencilIcon />
+                </span>
+                Edit Profile
+                <span className="ml-auto"><ArrowRightIcon /></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { navigate('/dashboard'); setShowMobileMenu(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.05] group-hover:bg-white/10 transition-colors duration-150">
+                  <ArrowLeftIcon />
+                </span>
+                Dashboard
+                <span className="ml-auto"><ArrowRightIcon /></span>
+              </button>
+            </div>
+
+            {/* Divider + Logout */}
+            <div className="mt-2 pt-2 border-t border-white/6">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-red-400 hover:text-red-300 hover:bg-red-500/[0.08] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-500/10 group-hover:bg-red-500/15 transition-colors duration-150">
+                  <ArrowRightIcon />
+                </span>
+                Logout
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main */}
@@ -601,6 +700,14 @@ export default function AnalyticsPage() {
         onClose={() => setSelectedModal(null)}
       />
 
+      {showEditProfile && (
+        <EditProfileModal
+          onClose={() => setShowEditProfile(false)}
+          addToast={addToast}
+        />
+      )}
+
+      <Toast toasts={toasts} removeToast={removeToast} />
     </div>
   )
 }

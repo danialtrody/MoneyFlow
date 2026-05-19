@@ -35,3 +35,13 @@ export async function register(email, password, fullName) {
   })
   return handleResponse(response)
 }
+
+export async function updateProfile(data) {
+  const response = await fetch(`${BASE_URL}/auth/me`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  return handleResponse(response)
+}

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from models.user import User
 from repositories import user_repository
-from schemas.user import UserCreate
+from schemas.user import UserCreate, UserUpdate
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -39,3 +39,17 @@ def authenticate(db: Session, email: str, password: str) -> User:
     if not user or not pwd_context.verify(password, user.hashed_password):
         raise ValueError("Incorrect email or password")
     return user
+
+
+def update_profile(db: Session, user: User, data: UserUpdate) -> User:
+    if data.full_name is None and data.new_password is None:
+        raise ValueError("At least one field must be provided")
+    if data.new_password is not None:
+        if not data.current_password:
+            raise ValueError("Current password is required to set a new password")
+        if not pwd_context.verify(data.current_password, user.hashed_password):
+            raise ValueError("Current password is incorrect")
+    hashed = pwd_context.hash(data.new_password) if data.new_password else None
+    return user_repository.update(
+        db, user, full_name=data.full_name, hashed_password=hashed
+    )
