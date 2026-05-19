@@ -31,7 +31,7 @@ async def import_transactions(
     content = await file.read()
     if len(content) > _MAX_SIZE:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="File exceeds the 5 MB limit.",
         )
 

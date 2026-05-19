@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, ReceiptIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
+import { BarChartIcon, ChevronDownIcon, CloseIcon, PencilIcon, ReceiptIcon, SearchIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
 import Toast from '../components/Toast'
 import TransactionsModal from '../components/TransactionsModal'
 import { useToast } from '../hooks/useToast'
@@ -99,13 +99,18 @@ export default function DashboardPage() {
   const [isSubmittingEditTx, setIsSubmittingEditTx] = useState(false)
   const [selectedTx, setSelectedTx] = useState(null)
 
+  const [txTypeFilter, setTxTypeFilter] = useState('all')
+  const [txDateFrom, setTxDateFrom] = useState('')
+  const [txDateTo, setTxDateTo] = useState('')
+  const [txCategoryFilter, setTxCategoryFilter] = useState('all')
+  const [showFilters, setShowFilters] = useState(false)
+
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const importFileRef = useRef(null)
 
-  const [pendingClearAll, setPendingClearAll] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isClearingAll, setIsClearingAll] = useState(false)
-  const pendingClearAllTimerRef = useRef(null)
 
   const { toasts, addToast, removeToast } = useToast()
 
@@ -121,7 +126,6 @@ export default function DashboardPage() {
       clearTimeout(pendingDeleteTimerRef.current)
       clearTimeout(pendingDeleteTxTimerRef.current)
       clearTimeout(pendingDeleteCatTimerRef.current)
-      clearTimeout(pendingClearAllTimerRef.current)
     }
   }, [])
 
@@ -162,16 +166,26 @@ export default function DashboardPage() {
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
 
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((tx) => {
+      const matchType = txTypeFilter === 'all' || tx.type === txTypeFilter
+      const matchFrom = !txDateFrom || tx.date >= txDateFrom
+      const matchTo   = !txDateTo   || tx.date <= txDateTo
+      const matchCat  = txCategoryFilter === 'all' || String(tx.category_id) === txCategoryFilter
+      return matchType && matchFrom && matchTo && matchCat
+    })
+  }, [transactions, txTypeFilter, txDateFrom, txDateTo, txCategoryFilter])
+
   const txSummary = useMemo(() => {
     let income = 0
     let expense = 0
-    for (const tx of transactions) {
+    for (const tx of filteredTransactions) {
       const amt = parseFloat(tx.amount)
       if (tx.type === 'income') income += amt
       else if (tx.type === 'expense') expense += amt
     }
     return { income, expense, net: income - expense }
-  }, [transactions])
+  }, [filteredTransactions])
 
   const portfolioStats = useMemo(() => {
     if (accounts.length === 0) return null
@@ -194,12 +208,12 @@ export default function DashboardPage() {
 
   const groupedTransactions = useMemo(() => {
     const map = new Map()
-    for (const tx of transactions) {
+    for (const tx of filteredTransactions) {
       if (!map.has(tx.date)) map.set(tx.date, [])
       map.get(tx.date).push(tx)
     }
     return [...map.entries()].sort(([a], [b]) => b.localeCompare(a))
-  }, [transactions])
+  }, [filteredTransactions])
 
   async function handleLogout() {
     await contextLogout()
@@ -258,8 +272,7 @@ export default function DashboardPage() {
       setSelectedAccountId(null)
       setTransactions([])
       setImportResult(null)
-      setPendingClearAll(false)
-      clearTimeout(pendingClearAllTimerRef.current)
+      setShowClearConfirm(false)
     }
     if (editingAccountId === account.id) {
       setEditingAccountId(null)
@@ -314,13 +327,27 @@ export default function DashboardPage() {
     const newId = selectedAccountId === account.id ? null : account.id
     setSelectedAccountId(newId)
     setImportResult(null)
-    setPendingClearAll(false)
-    clearTimeout(pendingClearAllTimerRef.current)
+    setShowClearConfirm(false)
     if (newId === null) setTransactions([])
     setShowAddTx(false)
     setTxForm(emptyTxForm())
     setPendingDeleteTxId(null)
     setEditingTxId(null)
+    setTxTypeFilter('all')
+    setTxDateFrom('')
+    setTxDateTo('')
+    setTxCategoryFilter('all')
+    setShowFilters(false)
+  }
+
+  const hasActiveFilters =
+    txTypeFilter !== 'all' || txDateFrom !== '' || txDateTo !== '' || txCategoryFilter !== 'all'
+
+  function clearFilters() {
+    setTxTypeFilter('all')
+    setTxDateFrom('')
+    setTxDateTo('')
+    setTxCategoryFilter('all')
   }
 
   function handleTxFormChange(e) {
@@ -556,15 +583,8 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleClearAll() {
-    if (!pendingClearAll) {
-      setPendingClearAll(true)
-      clearTimeout(pendingClearAllTimerRef.current)
-      pendingClearAllTimerRef.current = setTimeout(() => setPendingClearAll(false), 3000)
-      return
-    }
-    clearTimeout(pendingClearAllTimerRef.current)
-    setPendingClearAll(false)
+  async function handleConfirmClearAll() {
+    setShowClearConfirm(false)
     setEditingTxId(null)
     setPendingDeleteTxId(null)
     const accountId = selectedAccountId
@@ -919,11 +939,27 @@ export default function DashboardPage() {
           >
             {/* Panel header */}
             <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b border-white/6 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-white text-[15px] font-semibold">
-                {selectedAccount.name}
-                <span className="text-slate-500 font-normal ml-2 text-[13px]">transactions</span>
-              </h3>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-3">
+                <h3 className="text-white text-[15px] font-semibold">
+                  {selectedAccount.name}
+                  <span className="text-slate-500 font-normal ml-2 text-[13px]">transactions</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleToggleAddTx}
+                  className="hidden sm:block bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[12px] font-semibold px-3 py-1.5 rounded-lg transition-all duration-200 flex-shrink-0"
+                >
+                  {showAddTx ? 'Cancel' : '+ Add Transaction'}
+                </button>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 sm:flex sm:items-center sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleAddTx}
+                  className="sm:hidden bg-linear-to-r from-blue-600 to-violet-600 text-white text-[11.5px] font-semibold px-2 py-1.5 rounded-lg transition-all duration-200"
+                >
+                  {showAddTx ? 'Cancel' : '+ Add'}
+                </button>
                 <input
                   ref={importFileRef}
                   type="file"
@@ -935,31 +971,34 @@ export default function DashboardPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => importFileRef.current?.click()}
-                  disabled={isImporting || isClearingAll}
-                  className="text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isImporting ? 'Importing…' : 'Import'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearAll}
-                  aria-label="Clear all transactions"
-                  disabled={isClearingAll || isImporting || transactions.length === 0}
-                  className={`text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    pendingClearAll
-                      ? 'border-red-500/50 text-red-400 hover:border-red-500 hover:text-red-300'
+                  onClick={() => setShowFilters((v) => !v)}
+                  aria-label="Toggle filters"
+                  className={`flex items-center justify-center gap-1 text-[11.5px] sm:text-[12.5px] font-semibold px-2 sm:px-3.5 py-1.5 rounded-lg border transition-all duration-200 ${
+                    showFilters || hasActiveFilters
+                      ? 'border-blue-500/50 text-blue-400 bg-blue-500/10'
                       : 'border-white/10 text-slate-300 hover:text-white hover:border-white/20'
                   }`}
                 >
-                  {isClearingAll ? 'Clearing…' : pendingClearAll ? 'Confirm?' : 'Clear all'}
+                  <SearchIcon />
+                  <span className="hidden sm:inline">{hasActiveFilters ? 'Filtered' : 'Filter'}</span>
+                  <span className="sm:hidden">{hasActiveFilters ? 'On' : 'Filter'}</span>
                 </button>
                 <button
                   type="button"
-                  onClick={handleToggleAddTx}
-                  className="bg-linear-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-all duration-200"
+                  onClick={() => importFileRef.current?.click()}
+                  disabled={isImporting || isClearingAll}
+                  className="text-[11.5px] sm:text-[12.5px] font-semibold px-2 sm:px-3.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {showAddTx ? 'Cancel' : '+ Add Transaction'}
+                  {isImporting ? '…' : 'Import'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  aria-label="Clear all transactions"
+                  disabled={isClearingAll || isImporting || transactions.length === 0}
+                  className="text-[11.5px] sm:text-[12.5px] font-semibold px-2 sm:px-3.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isClearingAll ? '…' : <><span className="sm:hidden">Clear</span><span className="hidden sm:inline">Clear all</span></>}
                 </button>
               </div>
             </div>
@@ -1226,10 +1265,132 @@ export default function DashboardPage() {
                       {txSummary.net >= 0 ? '+' : '−'}{fmtCurrency(Math.abs(txSummary.net), selectedAccount?.currency)}
                     </span>
                   </div>
-                  <span className="ml-auto text-slate-600 text-[11px]">{transactions.length} transactions</span>
+                  <span className="ml-auto text-slate-600 text-[11px]">
+                    {hasActiveFilters
+                      ? `${filteredTransactions.length} of ${transactions.length} transactions`
+                      : `${transactions.length} transactions`}
+                  </span>
                 </div>
 
+                {/* Filter bar */}
+                {showFilters && (
+                  <div className="border-b border-white/6 bg-white/[0.01]">
+
+                    {/* ── Mobile layout ── */}
+                    <div className="sm:hidden px-4 py-3 space-y-2">
+                      <div className="flex w-full rounded-xl overflow-hidden border border-white/[0.08]">
+                        {['all', 'income', 'expense', 'transfer'].map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setTxTypeFilter(t)}
+                            className={`flex-1 px-3 py-2 text-[12px] font-medium transition-colors ${
+                              txTypeFilter === t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="date" value={txDateFrom} onChange={(e) => setTxDateFrom(e.target.value)} aria-label="From date"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-white text-[13px] outline-none focus:border-blue-500/50 transition-all duration-200" />
+                        <input type="date" value={txDateTo} onChange={(e) => setTxDateTo(e.target.value)} aria-label="To date"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-white text-[13px] outline-none focus:border-blue-500/50 transition-all duration-200" />
+                        <select value={txCategoryFilter} onChange={(e) => setTxCategoryFilter(e.target.value)}
+                          className="col-span-2 w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white outline-none focus:border-blue-500/50 transition-all duration-200">
+                          <option value="all">All categories</option>
+                          {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          disabled={!hasActiveFilters}
+                          className="col-span-2 w-full text-[12px] font-medium px-3 py-2 rounded-xl border transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed border-white/8 hover:border-white/20 text-slate-400 hover:text-white"
+                        >
+                          Clear all filters
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ── Desktop layout ── */}
+                    <div className="hidden sm:flex items-center gap-0 px-6 py-0 divide-x divide-white/[0.06]">
+                      {/* Type toggle */}
+                      <div className="flex items-center gap-1 px-4 py-3 flex-shrink-0">
+                        {['all', 'income', 'expense', 'transfer'].map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setTxTypeFilter(t)}
+                            className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all duration-150 ${
+                              txTypeFilter === t
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
+                            }`}
+                          >
+                            {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Date range */}
+                      <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0">
+                        <input
+                          type="date"
+                          value={txDateFrom}
+                          onChange={(e) => setTxDateFrom(e.target.value)}
+                          aria-label="From date"
+                          className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2.5 py-1 text-white text-[12px] outline-none focus:border-blue-500/50 transition-all duration-200"
+                        />
+                        <span className="text-slate-600 text-[11px]">—</span>
+                        <input
+                          type="date"
+                          value={txDateTo}
+                          onChange={(e) => setTxDateTo(e.target.value)}
+                          aria-label="To date"
+                          className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2.5 py-1 text-white text-[12px] outline-none focus:border-blue-500/50 transition-all duration-200"
+                        />
+                      </div>
+                      {/* Category */}
+                      <div className="relative px-4 py-3 flex-shrink-0">
+                        <select
+                          value={txCategoryFilter}
+                          onChange={(e) => setTxCategoryFilter(e.target.value)}
+                          className="appearance-none bg-transparent text-[13px] text-white outline-none cursor-pointer pr-5 max-w-[130px] truncate"
+                        >
+                          <option value="all">Category</option>
+                          {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                        </select>
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                          <ChevronDownIcon />
+                        </span>
+                      </div>
+                      {/* Clear */}
+                      <div className="px-4 py-3 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          disabled={!hasActiveFilters}
+                          className={`text-[12px] font-semibold px-3 py-1 rounded-lg border transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
+                            hasActiveFilters
+                              ? 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10'
+                              : 'border-white/8 text-slate-600'
+                          }`}
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
                 {/* Grouped by date */}
+                {filteredTransactions.length === 0 ? (
+                  <div className="text-center py-12 flex flex-col items-center gap-2">
+                    <span className="text-slate-700"><ReceiptIcon /></span>
+                    <p className="text-slate-500 text-[13px]">No transactions match your filters.</p>
+                  </div>
+                ) : (
                 <div className="category-list overflow-y-auto max-h-[540px]">
                 {groupedTransactions.map(([date, txs]) => {
                   const dayNet = txs.reduce(
@@ -1391,11 +1552,48 @@ export default function DashboardPage() {
                   )
                 })}
                 </div>
+                )}
               </>
             )}
           </div>
         )}
       </main>
+
+      {/* Clear all confirmation modal */}
+      {showClearConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowClearConfirm(false)}
+        >
+          <div
+            className="bg-[#0c1628] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            style={{ animation: 'fadeInUp 0.2s cubic-bezier(0.22,1,0.36,1) both' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-white text-[16px] font-semibold mb-2">Clear all transactions?</h3>
+            <p className="text-slate-400 text-[13px] mb-6">
+              This will permanently delete all transactions for{' '}
+              <span className="text-white font-medium">{selectedAccount?.name}</span> and reset its balance. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 text-[13px] font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/20 px-4 py-2.5 rounded-xl transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearAll}
+                className="flex-1 text-[13px] font-semibold text-white bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-xl transition-all duration-200"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toast toasts={toasts} removeToast={removeToast} />
 

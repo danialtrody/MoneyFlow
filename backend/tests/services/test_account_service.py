@@ -53,7 +53,7 @@ def test_create_account_delegates_to_repo(
         name="Main Bank",
         type=AccountType.bank,
         balance=Decimal("0.00"),
-        currency="USD",
+        currency="ILS",
     )
     assert result is expected
 
