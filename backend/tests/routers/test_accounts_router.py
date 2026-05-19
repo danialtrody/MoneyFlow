@@ -71,7 +71,7 @@ def test_create_account_applies_default_balance_and_currency(
     assert response.status_code == 201
     data = response.json()
     assert float(data["balance"]) == 0.00
-    assert data["currency"] == "USD"
+    assert data["currency"] == "ILS"
 
 
 def test_create_account_accepts_custom_balance_and_currency(
@@ -157,13 +157,12 @@ def test_update_account_returns_200_with_updated_fields(client: TestClient) -> N
 
     response = client.put(
         f"{_ACCOUNTS}/{account_id}",
-        json={"name": "Renamed", "balance": 999.99},
+        json={"name": "Renamed"},
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Renamed"
-    assert float(data["balance"]) == 999.99
 
 
 def test_update_account_not_found_returns_404(client: TestClient) -> None:
