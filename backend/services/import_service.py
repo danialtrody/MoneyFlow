@@ -5,6 +5,8 @@ from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
 from typing import Optional
 
+import openpyxl
+
 from sqlalchemy.orm import Session
 
 from enums import TransactionType
@@ -18,9 +20,10 @@ from services import transaction_service
 _DATE_COLS = {"תאריך", "date"}
 _DEBIT_COLS = {"בחובה", "חובה", "debit", "charge"}
 _CREDIT_COLS = {"בזכות", "זכות", "credit"}
-_DESC_COLS = {"תיאור", "description", "פרטים"}
+_AMOUNT_COLS = {"ש' זכות/חובה", "זכות/חובה", "סכום"}  # single signed column
+_DESC_COLS = {"תיאור", "description", "פרטים", "תיאור התנועה"}
 _EXT_DESC_COLS = {"תאור מורחב"}
-_BALANCE_COLS = {"היתרה בש\"ח", "יתרה", "balance", "running balance"}
+_BALANCE_COLS = {"היתרה בש\"ח", "יתרה", "ש' יתרה", "balance", "running balance"}
 
 _FALLBACK_CATEGORY = "Imported"
 _MAX_CAT_NAME = 100
@@ -86,13 +89,48 @@ def _extract_rows_csv(text: str) -> list[list[str]]:
     return list(csv.reader(io.StringIO(text)))
 
 
+def _extract_rows_xlsx(content: bytes) -> list[list[str]]:
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    ws = wb.active
+    if ws is None:
+        raise ValueError("XLSX file contains no active worksheet")
+    rows: list[list[str]] = []
+    for row in ws.iter_rows(values_only=True):
+        str_row: list[str] = []
+        for cell in row:
+            if cell is None:
+                str_row.append("")
+            elif isinstance(cell, (DateType, datetime)):
+                str_row.append(cell.strftime("%d/%m/%Y"))
+            else:
+                str_row.append(str(cell))
+        if any(c.strip() for c in str_row):
+            rows.append(str_row)
+    return rows
+
+
+_APOSTROPHE_VARIANTS = (
+    "׳",  # Hebrew geresh
+    "’",  # right single quotation mark
+    "‘",  # left single quotation mark
+)
+
+
+def _normalize_col(name: str) -> str:
+    """Normalize column name: strip, collapse spaces, unify apostrophe variants."""
+    name = name.strip()
+    for ch in _APOSTROPHE_VARIANTS:
+        name = name.replace(ch, "’")
+    return " ".join(name.split())
+
+
 def _find_header(
     rows: list[list[str]],
 ) -> tuple[int, dict[str, int]]:
     for idx, row in enumerate(rows):
-        stripped = [c.strip() for c in row]
-        if any(cell in _DATE_COLS for cell in stripped):
-            col_map = {cell: i for i, cell in enumerate(stripped) if cell}
+        normalized = [_normalize_col(c) for c in row]
+        if any(cell in _DATE_COLS for cell in normalized):
+            col_map = {cell: i for i, cell in enumerate(normalized) if cell}
             return idx, col_map
     raise ValueError("Could not find header row")
 
@@ -104,6 +142,18 @@ def _parse_amount(value: str) -> Optional[Decimal]:
     try:
         result = Decimal(cleaned).quantize(Decimal("0.01"))
         return result if result > 0 else None
+    except InvalidOperation:
+        return None
+
+
+def _parse_signed_amount(value: str) -> Optional[Decimal]:
+    """Parse a combined debit/credit cell where negative = expense, positive = income."""
+    cleaned = value.strip().replace(",", "").replace("\xa0", "").replace("‏", "")
+    if not cleaned or cleaned in ("0.00", "0"):
+        return None
+    try:
+        result = Decimal(cleaned).quantize(Decimal("0.01"))
+        return result if result != 0 else None
     except InvalidOperation:
         return None
 
@@ -179,20 +229,42 @@ def import_transactions(
     if account is None:
         raise ValueError("Account not found")
 
-    text = _decode(content)
-    rows = _extract_rows_html(text) if _is_html(text) else _extract_rows_csv(text)
+    if content[:2] == b"PK":  # xlsx is a ZIP archive
+        rows = _extract_rows_xlsx(content)
+    else:
+        text = _decode(content)
+        rows = _extract_rows_html(text) if _is_html(text) else _extract_rows_csv(text)
     header_idx, col_map = _find_header(rows)
 
     date_idx = _first_col(col_map, _DATE_COLS)
     debit_idx = _first_col(col_map, _DEBIT_COLS)
     credit_idx = _first_col(col_map, _CREDIT_COLS)
+    amount_idx = _first_col(col_map, _AMOUNT_COLS)
+    # Fuzzy fallback: any column whose header contains both זכות and חובה
+    if amount_idx is None:
+        for col_name, col_i in col_map.items():
+            if "זכות" in col_name and "חובה" in col_name:
+                amount_idx = col_i
+                break
     ext_desc_idx = _first_col(col_map, _EXT_DESC_COLS)
     desc_idx = _first_col(col_map, _DESC_COLS)
+    # Fuzzy fallback: any column whose header contains תיאור
+    if desc_idx is None:
+        for col_name, col_i in col_map.items():
+            if "תיאור" in col_name:
+                desc_idx = col_i
+                break
     balance_idx = _first_col(col_map, _BALANCE_COLS)
+    # Fuzzy fallback: any column whose header contains יתרה
+    if balance_idx is None:
+        for col_name, col_i in col_map.items():
+            if "יתרה" in col_name:
+                balance_idx = col_i
+                break
 
     if date_idx is None:
         raise ValueError("Missing date column")
-    if debit_idx is None and credit_idx is None:
+    if debit_idx is None and credit_idx is None and amount_idx is None:
         raise ValueError("Missing debit/credit columns")
 
     # Pre-load all categories visible to this user into a name→category cache.
@@ -222,8 +294,24 @@ def import_transactions(
             errors.append(RowError(row=row_num, reason=f"Invalid date: {raw_date!r}"))
             continue
 
-        debit_amount = _parse_amount(_get_cell(row, debit_idx)) if debit_idx is not None else None
-        credit_amount = _parse_amount(_get_cell(row, credit_idx)) if credit_idx is not None else None
+        if amount_idx is not None:
+            signed = _parse_signed_amount(_get_cell(row, amount_idx))
+            if signed is not None and signed < 0:
+                debit_amount: Optional[Decimal] = abs(signed)
+                credit_amount: Optional[Decimal] = None
+            elif signed is not None and signed > 0:
+                debit_amount = None
+                credit_amount = signed
+            else:
+                debit_amount = None
+                credit_amount = None
+        else:
+            debit_amount = (
+                _parse_amount(_get_cell(row, debit_idx)) if debit_idx is not None else None
+            )
+            credit_amount = (
+                _parse_amount(_get_cell(row, credit_idx)) if credit_idx is not None else None
+            )
 
         ext = _get_cell(row, ext_desc_idx)
         desc = _get_cell(row, desc_idx)
