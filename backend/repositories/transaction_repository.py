@@ -46,6 +46,15 @@ def delete_all_for_account(db: Session, account_id: int, user_id: int) -> None:
     ).delete(synchronize_session=False)
 
 
+def get_since(
+    db: Session, user_id: int, date_from: Optional[DateType] = None
+) -> list[Transaction]:
+    query = db.query(Transaction).filter(Transaction.user_id == user_id)
+    if date_from is not None:
+        query = query.filter(Transaction.date >= date_from)
+    return query.order_by(Transaction.date.desc(), Transaction.created_at.desc()).all()
+
+
 def find_duplicate(
     db: Session,
     account_id: int,

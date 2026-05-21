@@ -218,3 +218,80 @@ def test_delete_all_for_account_removes_only_that_accounts_transactions(db: Sess
 
     assert transaction_repository.get_all(db, user_id, acc1.id) == []
     assert len(transaction_repository.get_all(db, user_id, acc2.id)) == 1
+
+
+def _create_transaction_on_date(
+    db: Session,
+    account_id: int,
+    user_id: int,
+    category_id: int,
+    tx_date: date,
+    amount: Decimal = Decimal("100.00"),
+) -> object:
+    from models.transaction import Transaction
+
+    tx = Transaction(
+        account_id=account_id,
+        user_id=user_id,
+        type=TransactionType.income,
+        amount=amount,
+        category_id=category_id,
+        description=None,
+        date=tx_date,
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+def test_get_since_returns_all_transactions_when_no_date_filter(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+    cat_id = _create_category(db)
+    _create_transaction(db, account.id, user_id, cat_id, amount=Decimal("100.00"))
+    _create_transaction(db, account.id, user_id, cat_id, amount=Decimal("200.00"))
+
+    result = transaction_repository.get_since(db, user_id)
+
+    assert len(result) == 2
+
+
+def test_get_since_excludes_transactions_before_date_from(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+    cat_id = _create_category(db)
+    _create_transaction_on_date(db, account.id, user_id, cat_id, date(2020, 1, 1))
+    _create_transaction_on_date(db, account.id, user_id, cat_id, date(2024, 6, 1))
+
+    result = transaction_repository.get_since(db, user_id, date(2023, 1, 1))
+
+    assert len(result) == 1
+    assert result[0].date == date(2024, 6, 1)
+
+
+def test_get_since_includes_transaction_on_exact_cutoff_date(db: Session) -> None:
+    user_id = _create_user(db)
+    account = _create_account(db, user_id)
+    cat_id = _create_category(db)
+    cutoff = date(2024, 1, 1)
+    _create_transaction_on_date(db, account.id, user_id, cat_id, cutoff)
+
+    result = transaction_repository.get_since(db, user_id, cutoff)
+
+    assert len(result) == 1
+
+
+def test_get_since_does_not_return_other_users_transactions(db: Session) -> None:
+    user_a = _create_user(db, "a@example.com")
+    user_b = _create_user(db, "b@example.com")
+    account_a = _create_account(db, user_a)
+    account_b = _create_account(db, user_b)
+    cat_id = _create_category(db)
+    _create_transaction(db, account_a.id, user_a, cat_id, amount=Decimal("111.00"))
+    _create_transaction(db, account_b.id, user_b, cat_id, amount=Decimal("222.00"))
+
+    result = transaction_repository.get_since(db, user_a)
+
+    assert len(result) == 1
+    assert result[0].amount == Decimal("111.00")

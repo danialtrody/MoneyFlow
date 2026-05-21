@@ -73,6 +73,19 @@ input[type="date"] {
   background: rgba(148, 163, 184, 0.7);
 }
 
+/* AI advisor markdown rendering */
+.ai-prose { direction: auto; text-align: start; }
+.ai-prose p { margin: 0 0 0.6em 0; }
+.ai-prose p:last-child { margin-bottom: 0; }
+.ai-prose strong { color: #e2e8f0; font-weight: 600; }
+.ai-prose ol { list-style: decimal; padding-right: 1.25rem; margin: 0.4em 0 0.6em; }
+.ai-prose ul { list-style: disc; padding-right: 1.25rem; margin: 0.4em 0 0.6em; }
+.ai-prose li { margin-bottom: 0.35em; color: #cbd5e1; }
+.ai-prose li strong { color: #e2e8f0; }
+.ai-prose h1, .ai-prose h2, .ai-prose h3 {
+  color: #f1f5f9; font-weight: 600; margin: 0.8em 0 0.3em;
+}
+
 * {
   box-sizing: border-box;
 }
