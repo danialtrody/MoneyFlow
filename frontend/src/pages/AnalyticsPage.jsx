@@ -19,7 +19,7 @@ import DonutChart from '../components/DonutChart'
 import EditProfileModal from '../components/EditProfileModal'
 import TransactionsModal from '../components/TransactionsModal'
 import EmptyChart from '../components/EmptyChart'
-import { ArrowLeftIcon, ArrowRightIcon, CloseIcon, MenuIcon, PencilIcon, TrendUpIcon } from '../components/Icons'
+import { ArrowLeftIcon, CloseIcon, MenuIcon, PencilIcon, SparklesIcon, TrendUpIcon } from '../components/Icons'
 import SummaryCard from '../components/SummaryCard'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
@@ -305,19 +305,27 @@ export default function AnalyticsPage() {
           <div className="hidden sm:flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setShowEditProfile(true)}
-              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
-            >
-              <PencilIcon />
-              Edit Profile
-            </button>
-            <button
-              type="button"
               onClick={() => navigate('/dashboard')}
               className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
             >
               <ArrowLeftIcon />
               Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/advisor')}
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              <SparklesIcon />
+              AI Advisor
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEditProfile(true)}
+              className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-1.5 rounded-lg transition-all duration-200"
+            >
+              <PencilIcon />
+              Edit Profile
             </button>
             <button
               type="button"
@@ -378,7 +386,6 @@ export default function AnalyticsPage() {
                   <PencilIcon />
                 </span>
                 Edit Profile
-                <span className="ml-auto"><ArrowRightIcon /></span>
               </button>
 
               <button
@@ -390,7 +397,17 @@ export default function AnalyticsPage() {
                   <ArrowLeftIcon />
                 </span>
                 Dashboard
-                <span className="ml-auto"><ArrowRightIcon /></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { navigate('/advisor'); setShowMobileMenu(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 group"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.05] group-hover:bg-white/10 transition-colors duration-150">
+                  <SparklesIcon />
+                </span>
+                AI Advisor
               </button>
             </div>
 
@@ -401,9 +418,6 @@ export default function AnalyticsPage() {
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-red-400 hover:text-red-300 hover:bg-red-500/[0.08] rounded-xl transition-all duration-150 group"
               >
-                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-500/10 group-hover:bg-red-500/15 transition-colors duration-150">
-                  <ArrowRightIcon />
-                </span>
                 Logout
               </button>
             </div>
