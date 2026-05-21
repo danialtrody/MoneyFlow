@@ -291,6 +291,19 @@ def import_transactions(
         raw_date = _get_cell(row, date_idx)
         parsed_date = _parse_date(raw_date)
         if parsed_date is None:
+            # Repeated header row — date cell contains the column name itself
+            if _normalize_col(raw_date) in _DATE_COLS:
+                skipped += 1
+                continue
+            # Footer/section label with no amount — skip silently
+            has_amount = any(
+                _get_cell(row, i)
+                for i in [debit_idx, credit_idx, amount_idx]
+                if i is not None
+            )
+            if not has_amount:
+                skipped += 1
+                continue
             errors.append(RowError(row=row_num, reason=f"Invalid date: {raw_date!r}"))
             continue
 
