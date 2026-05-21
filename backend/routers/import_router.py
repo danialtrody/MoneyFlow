@@ -10,7 +10,7 @@ from services import import_service
 router = APIRouter(prefix="/import", tags=["import"])
 
 _MAX_SIZE = 5 * 1024 * 1024
-_ALLOWED_EXTENSIONS = {".csv", ".xls"}
+_ALLOWED_EXTENSIONS = {".csv", ".xls", ".xlsx"}
 
 
 @router.post("/transactions", response_model=ImportResponse)
@@ -25,7 +25,7 @@ async def import_transactions(
     if ext not in _ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only .csv and .xls files are supported.",
+            detail="Only .csv, .xls, and .xlsx files are supported.",
         )
 
     content = await file.read()
