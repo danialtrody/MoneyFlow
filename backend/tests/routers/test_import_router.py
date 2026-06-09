@@ -1,3 +1,6 @@
+import io
+
+import openpyxl
 from fastapi.testclient import TestClient
 
 _IMPORT = "/import/transactions"
@@ -111,3 +114,37 @@ def test_import_invalid_date_returns_error_entry(client: TestClient) -> None:
     data = response.json()
     assert data["imported"] == 0
     assert len(data["errors"]) == 1
+
+
+def _make_xlsx(rows: list[list[str]]) -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_import_valid_xlsx_returns_import_response(client: TestClient) -> None:
+    _login(client, _USER_A)
+    account_id = _create_account(client)
+    content = _make_xlsx([
+        ["date", "description", "debit", "credit"],
+        ["15/05/2026", "Salary", "", "1000.00"],
+    ])
+
+    response = client.post(
+        f"{_IMPORT}?account_id={account_id}",
+        files={"file": (
+            "import.xlsx",
+            content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported"] == 1
+    assert data["skipped"] == 0
+    assert data["errors"] == []

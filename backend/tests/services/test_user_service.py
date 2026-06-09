@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from schemas.user import UserCreate
+from schemas.user import UserCreate, UserUpdate
 from services import user_service
 
 
@@ -95,3 +95,69 @@ def test_authenticate_raises_when_password_is_wrong(
 
     with pytest.raises(ValueError, match="Incorrect email or password"):
         user_service.authenticate(mock_db, "user@example.com", "wrong_password")
+
+
+def test_update_profile_updates_full_name(
+    mock_repo: MagicMock, mock_db: MagicMock
+) -> None:
+    user = _hashed_user()
+    mock_repo.update.return_value = user
+    data = UserUpdate(full_name="New Name")
+
+    result = user_service.update_profile(mock_db, user, data)
+
+    mock_repo.update.assert_called_once_with(
+        mock_db, user, full_name="New Name", hashed_password=None
+    )
+    assert result is user
+
+
+def test_update_profile_updates_password(
+    mock_repo: MagicMock, mock_db: MagicMock
+) -> None:
+    user = _hashed_user("password123")
+    mock_repo.update.return_value = user
+    data = UserUpdate(current_password="password123", new_password="newpassword456")
+
+    user_service.update_profile(mock_db, user, data)
+
+    mock_repo.update.assert_called_once()
+    hashed = mock_repo.update.call_args.kwargs["hashed_password"]
+    assert hashed is not None
+    assert user_service.pwd_context.verify("newpassword456", hashed)
+
+
+def test_update_profile_raises_when_no_fields_provided(
+    mock_repo: MagicMock, mock_db: MagicMock
+) -> None:
+    user = _hashed_user()
+    data = UserUpdate()
+
+    with pytest.raises(ValueError, match="At least one field"):
+        user_service.update_profile(mock_db, user, data)
+
+    mock_repo.update.assert_not_called()
+
+
+def test_update_profile_raises_when_new_password_without_current_password(
+    mock_repo: MagicMock, mock_db: MagicMock
+) -> None:
+    user = _hashed_user()
+    data = UserUpdate(new_password="newpassword456")
+
+    with pytest.raises(ValueError, match="Current password is required"):
+        user_service.update_profile(mock_db, user, data)
+
+    mock_repo.update.assert_not_called()
+
+
+def test_update_profile_raises_when_current_password_is_wrong(
+    mock_repo: MagicMock, mock_db: MagicMock
+) -> None:
+    user = _hashed_user("correctpassword")
+    data = UserUpdate(current_password="wrongpassword", new_password="newpassword456")
+
+    with pytest.raises(ValueError, match="Current password is incorrect"):
+        user_service.update_profile(mock_db, user, data)
+
+    mock_repo.update.assert_not_called()
