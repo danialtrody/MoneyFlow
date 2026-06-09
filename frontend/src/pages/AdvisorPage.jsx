@@ -421,6 +421,7 @@ export default function AdvisorPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your finances…"
+              aria-label="Chat message"
               disabled={loading}
               className="flex-1 bg-white/4 border border-white/8 rounded-xl px-4 py-3.5 sm:py-3 text-white text-[16px] sm:text-[14px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/7 disabled:opacity-50"
             />

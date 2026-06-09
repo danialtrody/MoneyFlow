@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BarChartIcon, ChevronDownIcon, CloseIcon, MenuIcon, PencilIcon, ReceiptIcon, SearchIcon, SparklesIcon, TrashIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
+import { BarChartIcon, ChevronDownIcon, CloseIcon, MenuIcon, PencilIcon, ReceiptIcon, SearchIcon, SparklesIcon, TrendUpIcon, WalletIcon } from '../components/Icons'
 import EditProfileModal from '../components/EditProfileModal'
 import Toast from '../components/Toast'
 import TransactionsModal from '../components/TransactionsModal'
@@ -10,7 +10,7 @@ import { useToast } from '../hooks/useToast'
 import { createAccount, deleteAccount, getAccounts, updateAccount } from '../services/accountService'
 import { getCategories } from '../services/categoryService'
 import { importTransactions } from '../services/importService'
-import { clearTransactions, deleteTransaction, getTransactions } from '../services/transactionService'
+import { getTransactions } from '../services/transactionService'
 
 const TYPE_LABELS = {
   bank: 'Bank',
@@ -39,7 +39,7 @@ const inputClass =
 const compactInputClass =
   'w-full bg-white/4 border border-white/8 rounded-lg px-3 py-2 text-white text-[12px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50'
 
-const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', balance: '0.00', currency: 'ILS' }
+const EMPTY_ACCOUNT_FORM = { name: '', type: 'bank', currency: 'ILS' }
 
 function fmtCurrency(amount, currency) {
   const formatted = new Intl.NumberFormat('en-US', {
@@ -64,8 +64,7 @@ export default function DashboardPage() {
   const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [loadingTx, setLoadingTx] = useState(false)
-  const [pendingDeleteTxId, setPendingDeleteTxId] = useState(null)
-  const pendingDeleteTxTimerRef = useRef(null)
+
   const selectedAccountIdRef = useRef(null)
   const [categories, setCategories] = useState([])
   const categoriesLoadedRef = useRef(false)
@@ -85,8 +84,7 @@ export default function DashboardPage() {
   const [importResult, setImportResult] = useState(null)
   const importFileRef = useRef(null)
 
-  const [showClearConfirm, setShowClearConfirm] = useState(false)
-  const [isClearingAll, setIsClearingAll] = useState(false)
+
   const [showEditProfile, setShowEditProfile] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
 
@@ -102,7 +100,6 @@ export default function DashboardPage() {
   useEffect(() => {
     return () => {
       clearTimeout(pendingDeleteTimerRef.current)
-      clearTimeout(pendingDeleteTxTimerRef.current)
     }
   }, [])
 
@@ -190,15 +187,6 @@ export default function DashboardPage() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  function handleBalanceKeyDown(e) {
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
-    e.preventDefault()
-    const delta = e.shiftKey ? 0.1 : 1
-    const current = parseFloat(form.balance) || 0
-    const next = e.key === 'ArrowUp' ? current + delta : current - delta
-    setForm((prev) => ({ ...prev, balance: Math.max(0, parseFloat(next.toFixed(2))).toString() }))
-  }
-
   async function handleAddAccount(e) {
     e.preventDefault()
     if (isSubmitting) return
@@ -211,7 +199,7 @@ export default function DashboardPage() {
       const account = await createAccount({
         name: form.name.trim(),
         type: form.type,
-        balance: parseFloat(form.balance) || 0,
+        balance: 0,
         currency: form.currency.trim() || 'ILS',
       })
       setAccounts((prev) => [...prev, account])
@@ -238,7 +226,6 @@ export default function DashboardPage() {
       setSelectedAccountId(null)
       setTransactions([])
       setImportResult(null)
-      setShowClearConfirm(false)
     }
     if (editingAccountId === account.id) {
       setEditingAccountId(null)
@@ -293,9 +280,7 @@ export default function DashboardPage() {
     const newId = selectedAccountId === account.id ? null : account.id
     setSelectedAccountId(newId)
     setImportResult(null)
-    setShowClearConfirm(false)
     if (newId === null) setTransactions([])
-    setPendingDeleteTxId(null)
     setTxTypeFilter('all')
     setTxDateFrom('')
     setTxDateTo('')
@@ -311,51 +296,6 @@ export default function DashboardPage() {
     setTxDateFrom('')
     setTxDateTo('')
     setTxCategoryFilter('all')
-  }
-
-  async function handleDeleteTransaction(tx) {
-    if (pendingDeleteTxId !== tx.id) {
-      setPendingDeleteTxId(tx.id)
-      clearTimeout(pendingDeleteTxTimerRef.current)
-      pendingDeleteTxTimerRef.current = setTimeout(() => setPendingDeleteTxId(null), 3000)
-      return
-    }
-    clearTimeout(pendingDeleteTxTimerRef.current)
-    setPendingDeleteTxId(null)
-    const accountId = selectedAccountId
-    try {
-      await deleteTransaction(tx.id)
-      const [updatedAccounts, updatedTxs] = await Promise.all([
-        getAccounts(),
-        getTransactions(accountId),
-      ])
-      setAccounts(updatedAccounts)
-      if (selectedAccountIdRef.current === accountId) {
-        setTransactions(updatedTxs)
-      }
-      addToast('success', 'Transaction deleted.')
-    } catch (err) {
-      addToast('error', err.message || 'Failed to delete transaction.')
-    }
-  }
-
-  async function handleConfirmClearAll() {
-    setShowClearConfirm(false)
-    setPendingDeleteTxId(null)
-    const accountId = selectedAccountId
-    setIsClearingAll(true)
-    try {
-      await clearTransactions(accountId)
-      const updatedAccounts = await getAccounts()
-      setAccounts(updatedAccounts)
-      if (selectedAccountIdRef.current === accountId) setTransactions([])
-      setImportResult(null)
-      addToast('success', 'All transactions cleared.')
-    } catch (err) {
-      addToast('error', err.message || 'Failed to clear transactions.')
-    } finally {
-      setIsClearingAll(false)
-    }
   }
 
   async function handleImportFile(e) {
@@ -637,21 +577,6 @@ export default function DashboardPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="account-balance" className="block text-[12px] font-medium text-slate-400 tracking-wide">Balance</label>
-                  <input
-                    id="account-balance"
-                    name="balance"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={form.balance}
-                    onChange={handleFormChange}
-                    onKeyDown={handleBalanceKeyDown}
-                    placeholder="0.00"
-                    className={inputClass}
-                  />
-                </div>
-                <div className="space-y-1.5">
                   <label htmlFor="account-currency" className="block text-[12px] font-medium text-slate-400 tracking-wide">Currency</label>
                   <input
                     id="account-currency"
@@ -840,19 +765,10 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => importFileRef.current?.click()}
-                  disabled={isImporting || isClearingAll}
+                  disabled={isImporting}
                   className="text-[11.5px] sm:text-[12.5px] font-semibold px-2 sm:px-3.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isImporting ? '…' : 'Import'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowClearConfirm(true)}
-                  aria-label="Clear all transactions"
-                  disabled={isClearingAll || isImporting || transactions.length === 0}
-                  className="text-[11.5px] sm:text-[12.5px] font-semibold px-2 sm:px-3.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isClearingAll ? '…' : <><span className="sm:hidden">Clear</span><span className="hidden sm:inline">Clear all</span></>}
                 </button>
               </div>
             </div>
@@ -938,14 +854,15 @@ export default function DashboardPage() {
                   <div className="border-b border-white/6 bg-white/[0.01]">
 
                     {/* ── Mobile layout ── */}
-                    <div className="sm:hidden px-4 py-3 space-y-2">
-                      <div className="flex w-full rounded-xl overflow-hidden border border-white/[0.08]">
+                    <div className="sm:hidden px-4 py-3 space-y-2.5">
+                      {/* Type toggle */}
+                      <div className="flex w-full rounded-xl overflow-hidden border border-white/8">
                         {['all', 'income', 'expense', 'transfer'].map((t) => (
                           <button
                             key={t}
                             type="button"
                             onClick={() => setTxTypeFilter(t)}
-                            className={`flex-1 px-3 py-2 text-[12px] font-medium transition-colors ${
+                            className={`flex-1 py-2 text-[11.5px] font-medium transition-colors ${
                               txTypeFilter === t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
                             }`}
                           >
@@ -953,25 +870,48 @@ export default function DashboardPage() {
                           </button>
                         ))}
                       </div>
+                      {/* Date range */}
                       <div className="grid grid-cols-2 gap-2">
-                        <input type="date" value={txDateFrom} onChange={(e) => setTxDateFrom(e.target.value)} aria-label="From date"
-                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-white text-[13px] outline-none focus:border-blue-500/50 transition-all duration-200" />
-                        <input type="date" value={txDateTo} onChange={(e) => setTxDateTo(e.target.value)} aria-label="To date"
-                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-white text-[13px] outline-none focus:border-blue-500/50 transition-all duration-200" />
-                        <select value={txCategoryFilter} onChange={(e) => setTxCategoryFilter(e.target.value)}
-                          className="col-span-2 w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white outline-none focus:border-blue-500/50 transition-all duration-200">
-                          <option value="all">All categories</option>
-                          {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-                        </select>
+                        <div className="space-y-1">
+                          <label className="block text-[10.5px] font-medium text-slate-500 px-0.5">From</label>
+                          <input
+                            type="date"
+                            value={txDateFrom}
+                            onChange={(e) => setTxDateFrom(e.target.value)}
+                            aria-label="From date"
+                            className="w-full bg-white/4 border border-white/8 rounded-xl px-2.5 py-2 text-white text-[12px] outline-none focus:border-blue-500/50 transition-all duration-200"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[10.5px] font-medium text-slate-500 px-0.5">To</label>
+                          <input
+                            type="date"
+                            value={txDateTo}
+                            onChange={(e) => setTxDateTo(e.target.value)}
+                            aria-label="To date"
+                            className="w-full bg-white/4 border border-white/8 rounded-xl px-2.5 py-2 text-white text-[12px] outline-none focus:border-blue-500/50 transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+                      {/* Category */}
+                      <select
+                        value={txCategoryFilter}
+                        onChange={(e) => setTxCategoryFilter(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white outline-none focus:border-blue-500/50 transition-all duration-200"
+                      >
+                        <option value="all">All categories</option>
+                        {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                      </select>
+                      {/* Clear — only visible when filters are active */}
+                      {hasActiveFilters && (
                         <button
                           type="button"
                           onClick={clearFilters}
-                          disabled={!hasActiveFilters}
-                          className="col-span-2 w-full text-[12px] font-medium px-3 py-2 rounded-xl border transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed border-white/8 hover:border-white/20 text-slate-400 hover:text-white"
+                          className="w-full text-[12px] font-medium px-3 py-2 rounded-xl border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 transition-colors duration-200"
                         >
-                          Clear all filters
+                          Clear filters
                         </button>
-                      </div>
+                      )}
                     </div>
 
                     {/* ── Desktop layout ── */}
@@ -1101,20 +1041,6 @@ export default function DashboardPage() {
                                     })}
                                     <span className="text-slate-500 text-[11px] font-normal ml-1">{selectedAccount.currency}</span>
                                   </span>
-                                  <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteTransaction(tx)}
-                                      aria-label={pendingDeleteTxId === tx.id ? 'Confirm delete' : 'Delete transaction'}
-                                      className={`p-1.5 rounded-lg transition-colors duration-150 ${
-                                        pendingDeleteTxId === tx.id
-                                          ? 'text-red-400 text-[11px] font-semibold'
-                                          : 'text-slate-600 hover:text-red-400 hover:bg-white/4'
-                                      }`}
-                                    >
-                                      {pendingDeleteTxId === tx.id ? 'Delete?' : <TrashIcon />}
-                                    </button>
-                                  </div>
                                 </div>
                               </div>
                             </li>
@@ -1130,42 +1056,6 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
-
-      {/* Clear all confirmation modal */}
-      {showClearConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowClearConfirm(false)}
-        >
-          <div
-            className="bg-[#0c1628] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
-            style={{ animation: 'fadeInUp 0.2s cubic-bezier(0.22,1,0.36,1) both' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-white text-[16px] font-semibold mb-2">Clear all transactions?</h3>
-            <p className="text-slate-400 text-[13px] mb-6">
-              This will permanently delete all transactions for{' '}
-              <span className="text-white font-medium">{selectedAccount?.name}</span> and reset its balance. This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowClearConfirm(false)}
-                className="flex-1 text-[13px] font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/20 px-4 py-2.5 rounded-xl transition-all duration-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmClearAll}
-                className="flex-1 text-[13px] font-semibold text-white bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-xl transition-all duration-200"
-              >
-                Clear all
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <Toast toasts={toasts} removeToast={removeToast} />
 

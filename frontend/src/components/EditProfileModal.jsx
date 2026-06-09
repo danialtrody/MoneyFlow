@@ -11,6 +11,7 @@ export default function EditProfileModal({ onClose, addToast }) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [errorField, setErrorField] = useState(null)
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose() }
@@ -18,22 +19,28 @@ export default function EditProfileModal({ onClose, addToast }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  function fail(msg, field) {
+    setError(msg)
+    setErrorField(field)
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
+    setErrorField(null)
 
     if (!fullName.trim()) {
-      setError('Full name is required.')
+      fail('Full name is required.', 'name')
       return
     }
 
     if (newPassword) {
       if (newPassword.length < 8) {
-        setError('New password must be at least 8 characters.')
+        fail('New password must be at least 8 characters.', 'newPassword')
         return
       }
       if (newPassword !== confirmPassword) {
-        setError('New passwords do not match.')
+        fail('New passwords do not match.', 'confirmPassword')
         return
       }
     }
@@ -57,8 +64,13 @@ export default function EditProfileModal({ onClose, addToast }) {
     }
   }
 
-  const inputClass =
-    'w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-white text-[13px] placeholder-slate-600 focus:outline-none focus:border-blue-500/60 focus:bg-white/[0.06] transition-colors duration-150'
+  const baseInput =
+    'w-full bg-white/[0.04] border rounded-lg px-3 py-2 text-white text-[13px] placeholder-slate-600 focus:outline-none focus:bg-white/[0.06] transition-colors duration-150'
+  function inputClass(field) {
+    return errorField === field
+      ? `${baseInput} border-red-500/60 focus:border-red-500/80`
+      : `${baseInput} border-white/10 focus:border-blue-500/60`
+  }
   const labelClass = 'block text-slate-400 text-[11.5px] font-medium mb-1.5'
 
   return (
@@ -96,8 +108,8 @@ export default function EditProfileModal({ onClose, addToast }) {
               id="ep-full-name"
               type="text"
               value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className={inputClass}
+              onChange={(e) => { setFullName(e.target.value); if (errorField === 'name') { setError(null); setErrorField(null) } }}
+              className={inputClass('name')}
               placeholder="Your name"
               maxLength={255}
             />
@@ -115,8 +127,8 @@ export default function EditProfileModal({ onClose, addToast }) {
                   id="ep-current-password"
                   type="password"
                   value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className={inputClass}
+                  onChange={(e) => { setCurrentPassword(e.target.value); if (error) { setError(null); setErrorField(null) } }}
+                  className={inputClass(null)}
                   placeholder="Required to change password"
                   autoComplete="current-password"
                 />
@@ -127,8 +139,8 @@ export default function EditProfileModal({ onClose, addToast }) {
                   id="ep-new-password"
                   type="password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className={inputClass}
+                  onChange={(e) => { setNewPassword(e.target.value); if (errorField === 'newPassword') { setError(null); setErrorField(null) } }}
+                  className={inputClass('newPassword')}
                   placeholder="Min 8 characters"
                   autoComplete="new-password"
                 />
@@ -139,8 +151,8 @@ export default function EditProfileModal({ onClose, addToast }) {
                   id="ep-confirm-password"
                   type="password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={inputClass}
+                  onChange={(e) => { setConfirmPassword(e.target.value); if (errorField === 'confirmPassword') { setError(null); setErrorField(null) } }}
+                  className={inputClass('confirmPassword')}
                   placeholder="Repeat new password"
                   autoComplete="new-password"
                 />

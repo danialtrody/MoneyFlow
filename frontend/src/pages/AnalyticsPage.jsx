@@ -19,12 +19,13 @@ import DonutChart from '../components/DonutChart'
 import EditProfileModal from '../components/EditProfileModal'
 import TransactionsModal from '../components/TransactionsModal'
 import EmptyChart from '../components/EmptyChart'
-import { ArrowLeftIcon, CloseIcon, MenuIcon, PencilIcon, SparklesIcon, TrendUpIcon } from '../components/Icons'
+import { ArrowLeftIcon, CloseIcon, DownloadIcon, MenuIcon, PencilIcon, SparklesIcon, TrendUpIcon } from '../components/Icons'
 import SummaryCard from '../components/SummaryCard'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
 import { getAccounts } from '../services/accountService'
 import { getAllTransactions } from '../services/transactionService'
+import { exportAnalyticsPDF } from '../services/exportService'
 
 const CHART_COLORS = [
   '#6EE7B7', '#F87171', '#60A5FA', '#C084FC',
@@ -59,6 +60,28 @@ function fmtCurrency(amount, currency) {
   return currency ? `${formatted} ${currency}` : formatted
 }
 
+function buildCategoryData(transactions, type) {
+  const map = new Map()
+  const relevant = transactions.filter((tx) => tx.type === type)
+  const total = relevant.reduce((s, tx) => s + parseFloat(tx.amount), 0)
+  for (const tx of relevant) {
+    const key = tx.category_name || 'Uncategorized'
+    if (!map.has(key)) map.set(key, { name: key, value: 0, count: 0 })
+    const cat = map.get(key)
+    cat.value += parseFloat(tx.amount)
+    cat.count++
+  }
+  const items = [...map.values()]
+    .sort((a, b) => b.value - a.value)
+    .map((item, i) => ({
+      ...item,
+      value: +item.value.toFixed(2),
+      color: CHART_COLORS[i % CHART_COLORS.length],
+      pct: total > 0 ? (item.value / total) * 100 : 0,
+    }))
+  return { items, total: +total.toFixed(2) }
+}
+
 export default function AnalyticsPage() {
   const { user, logout: contextLogout } = useAuth()
   const navigate = useNavigate()
@@ -69,6 +92,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [donutView, setDonutView] = useState('expense')
+  const [exporting, setExporting] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedModal, setSelectedModal] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -123,6 +147,21 @@ export default function AnalyticsPage() {
   async function handleLogout() {
     await contextLogout()
     navigate('/login', { replace: true })
+  }
+
+  async function handleExportPDF() {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const accountLabel = accountId === 'all'
+        ? 'All Accounts'
+        : (accounts.find((a) => String(a.id) === String(accountId))?.name ?? 'All Accounts')
+      await exportAnalyticsPDF({ period, summaryStats, expenseCategories, incomeCategories, dominantCurrency, accountLabel })
+    } catch {
+      addToast('error', 'Failed to generate PDF. Please try again.')
+    } finally {
+      setExporting(false)
+    }
   }
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -180,27 +219,20 @@ export default function AnalyticsPage() {
       .map(([, v]) => ({ ...v, income: +v.income.toFixed(2), expense: +v.expense.toFixed(2) }))
   }, [filteredTransactions, period])
 
-  const donutData = useMemo(() => {
-    const map = new Map()
-    const relevant = filteredTransactions.filter((tx) => tx.type === donutView)
-    const total = relevant.reduce((s, tx) => s + parseFloat(tx.amount), 0)
-    for (const tx of relevant) {
-      const key = tx.category_name || 'Uncategorized'
-      if (!map.has(key)) map.set(key, { name: key, value: 0, count: 0 })
-      const cat = map.get(key)
-      cat.value += parseFloat(tx.amount)
-      cat.count++
-    }
-    const items = [...map.values()]
-      .sort((a, b) => b.value - a.value)
-      .map((item, i) => ({
-        ...item,
-        value: +item.value.toFixed(2),
-        color: CHART_COLORS[i % CHART_COLORS.length],
-        pct: total > 0 ? (item.value / total) * 100 : 0,
-      }))
-    return { items, total: +total.toFixed(2) }
-  }, [filteredTransactions, donutView])
+  const donutData = useMemo(
+    () => buildCategoryData(filteredTransactions, donutView),
+    [filteredTransactions, donutView],
+  )
+
+  const expenseCategories = useMemo(
+    () => buildCategoryData(filteredTransactions, 'expense').items,
+    [filteredTransactions],
+  )
+
+  const incomeCategories = useMemo(
+    () => buildCategoryData(filteredTransactions, 'income').items,
+    [filteredTransactions],
+  )
 
   const extraStats = useMemo(() => {
     let largestExpense = 0, largestIncome = 0
@@ -431,20 +463,20 @@ export default function AnalyticsPage() {
         style={{ animation: 'fadeInUp 0.35s cubic-bezier(0.22,1,0.36,1) both' }}
       >
         {/* Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div>
             <h2 className="text-white text-[20px] font-semibold tracking-tight">Financial Analytics</h2>
             <p className="text-slate-500 text-[13px] mt-0.5">Insights from your transactions</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Period selector */}
-            <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3">
+            {/* Period selector — buttons stretch full width on mobile */}
+            <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1">
               {PERIODS.map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setPeriod(key)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-200 ${
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-200 ${
                     period === key
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -454,17 +486,32 @@ export default function AnalyticsPage() {
                 </button>
               ))}
             </div>
-            {/* Account filter */}
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-slate-300 text-[13px] outline-none focus:border-blue-500/50 transition-colors cursor-pointer"
-            >
-              <option value="all">All Accounts</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={String(a.id)}>{a.name}</option>
-              ))}
-            </select>
+            {/* Account + Export: side-by-side on mobile and desktop */}
+            <div className="flex items-center gap-2">
+              <select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="flex-1 sm:flex-none bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-slate-300 text-[13px] outline-none focus:border-blue-500/50 transition-colors cursor-pointer"
+              >
+                <option value="all">All Accounts</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={String(a.id)}>{a.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleExportPDF}
+                disabled={exporting}
+                className="flex items-center gap-1.5 text-[13px] font-medium text-slate-300 hover:text-white border border-white/8 hover:border-white/[0.14] hover:bg-white/3 px-4 py-2 rounded-lg transition-all duration-200 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exporting ? (
+                  <span className="w-3 h-3 border border-slate-400/40 border-t-slate-300 rounded-full animate-spin" />
+                ) : (
+                  <DownloadIcon />
+                )}
+                {exporting ? 'Generating…' : 'Export PDF'}
+              </button>
+            </div>
           </div>
         </div>
 
