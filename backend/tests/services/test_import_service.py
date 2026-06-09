@@ -1,5 +1,7 @@
+import io
 from decimal import Decimal
 
+import openpyxl
 import pytest
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,16 @@ def _make_account(db: Session, user_id: int, balance: float = 0.0) -> object:
 
 def _csv(content: str) -> bytes:
     return content.encode("utf-8")
+
+
+def _xlsx(rows: list[list[str]]) -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 _HEADER = "date,description,debit,credit\n"
@@ -175,3 +187,37 @@ def test_import_no_header_raises_value_error(db: Session) -> None:
 
     with pytest.raises(ValueError, match="Could not find header row"):
         import_service.import_transactions(db, user_id, account.id, content)
+
+
+def test_import_xlsx_expense_row_creates_transaction(db: Session) -> None:
+    user_id = _make_user(db)
+    account = _make_account(db, user_id)
+    content = _xlsx([
+        ["date", "description", "debit", "credit"],
+        ["15/05/2026", "Coffee", "50.00", ""],
+    ])
+
+    result = import_service.import_transactions(db, user_id, account.id, content)
+
+    assert result.imported == 1
+    assert result.skipped == 0
+    assert result.errors == []
+    txs = transaction_repository.get_all(db, user_id)
+    assert txs[0].type == TransactionType.expense
+    assert txs[0].amount == Decimal("50.00")
+
+
+def test_import_xlsx_income_row_creates_transaction(db: Session) -> None:
+    user_id = _make_user(db)
+    account = _make_account(db, user_id)
+    content = _xlsx([
+        ["date", "description", "debit", "credit"],
+        ["15/05/2026", "Salary", "", "2000.00"],
+    ])
+
+    result = import_service.import_transactions(db, user_id, account.id, content)
+
+    assert result.imported == 1
+    txs = transaction_repository.get_all(db, user_id)
+    assert txs[0].type == TransactionType.income
+    assert txs[0].amount == Decimal("2000.00")

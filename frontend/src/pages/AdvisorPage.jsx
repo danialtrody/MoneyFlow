@@ -165,7 +165,7 @@ export default function AdvisorPage() {
   const periodLabel = PERIODS.find((p) => p.key === selectedPeriod)?.label ?? 'All'
 
   return (
-    <div className="min-h-screen bg-[#020817] flex flex-col">
+    <div className="h-dvh sm:h-auto sm:min-h-screen bg-[#020817] flex flex-col overflow-hidden sm:overflow-visible">
       {/* Header */}
       <header className="relative border-b border-white/6 bg-white/2 backdrop-blur-xl px-6 shrink-0">
         <div className="max-w-5xl mx-auto flex items-center justify-between py-4">
@@ -293,8 +293,8 @@ export default function AdvisorPage() {
       </header>
 
       {/* Period selector */}
-      <div className="shrink-0 border-b border-white/6 py-3">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center gap-2">
+      <div className="shrink-0 border-b border-white/6 py-3 overflow-x-auto sm:overflow-x-visible">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center gap-2 min-w-max sm:min-w-0">
           <span className="text-slate-500 text-[12px] mr-1">Period:</span>
           {PERIODS.map((p) => (
             <button
@@ -314,7 +314,7 @@ export default function AdvisorPage() {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 overflow-y-auto category-list py-6">
+      <div className="flex-1 overflow-y-auto category-list py-4 sm:py-6">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col gap-4">
 
           {messages.length === 0 && (
@@ -353,7 +353,7 @@ export default function AdvisorPage() {
                   <SparklesIcon />
                 </div>
               )}
-              <div className="flex flex-col gap-1 max-w-[78%]">
+              <div className="flex flex-col gap-1 max-w-[90%] sm:max-w-[78%]">
                 <div
                   className={`rounded-2xl px-4 py-3 text-[14px] leading-7 ${
                     msg.role === 'user'
@@ -412,7 +412,7 @@ export default function AdvisorPage() {
       </div>
 
       {/* Input bar */}
-      <div className="shrink-0 border-t border-white/6 bg-white/2 py-4">
+      <div className="shrink-0 border-t border-white/6 bg-white/2 py-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col gap-2">
           <form onSubmit={handleSubmit} className="flex gap-3">
             <input
@@ -422,7 +422,7 @@ export default function AdvisorPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your finances…"
               disabled={loading}
-              className="flex-1 bg-white/4 border border-white/8 rounded-xl px-4 py-3 text-white text-[14px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/7 disabled:opacity-50"
+              className="flex-1 bg-white/4 border border-white/8 rounded-xl px-4 py-3.5 sm:py-3 text-white text-[16px] sm:text-[14px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/7 disabled:opacity-50"
             />
             {messages.length > 0 && (
               <button
@@ -449,7 +449,7 @@ export default function AdvisorPage() {
       {showEditProfile && (
         <EditProfileModal
           onClose={() => setShowEditProfile(false)}
-          onSuccess={() => addToast('success', 'Profile updated')}
+          addToast={addToast}
         />
       )}
 

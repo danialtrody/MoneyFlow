@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 _REGISTER = "/auth/register"
 _LOGIN = "/auth/login"
 _LOGOUT = "/auth/logout"
+_ME = "/auth/me"
 _HEALTH = "/health"
 
 _VALID_USER = {
@@ -147,3 +148,91 @@ def test_logout_blocks_subsequent_protected_requests(client: TestClient) -> None
     client.post(_LOGOUT)
 
     assert client.get("/accounts").status_code == 401
+
+
+def _login(client: TestClient) -> None:
+    client.post(_REGISTER, json=_VALID_USER)
+    client.post(_LOGIN, json={"email": _VALID_USER["email"], "password": _VALID_USER["password"]})
+
+
+def test_me_returns_current_user_when_authenticated(client: TestClient) -> None:
+    _login(client)
+
+    response = client.get(_ME)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == _VALID_USER["email"]
+    assert data["full_name"] == _VALID_USER["full_name"]
+    assert "id" in data
+    assert "created_at" in data
+    assert "hashed_password" not in data
+
+
+def test_me_returns_401_when_not_authenticated(client: TestClient) -> None:
+    response = client.get(_ME)
+
+    assert response.status_code == 401
+
+
+def test_update_me_updates_full_name(client: TestClient) -> None:
+    _login(client)
+
+    response = client.put(_ME, json={"full_name": "Updated Name"})
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Updated Name"
+
+
+def test_update_me_updates_password_and_new_password_works_for_login(
+    client: TestClient,
+) -> None:
+    _login(client)
+
+    update_response = client.put(
+        _ME,
+        json={"current_password": _VALID_USER["password"], "new_password": "newpassword456"},
+    )
+    assert update_response.status_code == 200
+
+    client.post(_LOGOUT)
+    login_response = client.post(
+        _LOGIN,
+        json={"email": _VALID_USER["email"], "password": "newpassword456"},
+    )
+    assert login_response.status_code == 200
+
+
+def test_update_me_returns_400_when_no_fields_provided(client: TestClient) -> None:
+    _login(client)
+
+    response = client.put(_ME, json={})
+
+    assert response.status_code == 400
+
+
+def test_update_me_returns_400_when_current_password_is_wrong(client: TestClient) -> None:
+    _login(client)
+
+    response = client.put(
+        _ME,
+        json={"current_password": "wrongpassword", "new_password": "newpassword456"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_me_returns_400_when_new_password_provided_without_current_password(
+    client: TestClient,
+) -> None:
+    _login(client)
+
+    response = client.put(_ME, json={"new_password": "newpassword456"})
+
+    assert response.status_code == 400
+
+
+def test_update_me_returns_401_when_not_authenticated(client: TestClient) -> None:
+    response = client.put(_ME, json={"full_name": "New Name"})
+
+    assert response.status_code == 401
