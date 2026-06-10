@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from routers import accounts, ai, auth, categories, import_router, transactions
+from routers import accounts, ai, auth, categories, google_auth, import_router, transactions
 
 load_dotenv()
 
@@ -41,6 +41,7 @@ async def validation_exception_handler(
 
 
 app.include_router(auth.router)
+app.include_router(google_auth.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(categories.router)

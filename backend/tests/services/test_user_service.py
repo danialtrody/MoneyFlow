@@ -50,7 +50,7 @@ def test_register_hashes_password_before_storing(
 
     user_service.register(mock_db, data)
 
-    _, _, hashed, _ = mock_repo.create.call_args.args
+    hashed = mock_repo.create.call_args.kwargs["hashed_password"]
     assert hashed != "password123"
     assert user_service.pwd_context.verify("password123", hashed)
 

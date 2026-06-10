@@ -45,3 +45,13 @@ export async function updateProfile(data) {
   })
   return handleResponse(response)
 }
+
+export async function loginWithGoogle(accessToken) {
+  const response = await fetch(`${BASE_URL}/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ access_token: accessToken }),
+  })
+  return handleResponse(response, { skipAuthRedirect: true })
+}

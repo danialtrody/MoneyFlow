@@ -9,7 +9,7 @@ def test_get_by_email_returns_none_when_not_found(db: Session) -> None:
 
 
 def test_get_by_email_returns_user_when_email_matches(db: Session) -> None:
-    user_repository.create(db, "found@example.com", "hashed_pw", "Found User")
+    user_repository.create(db, "found@example.com", "Found User", "hashed_pw")
 
     result = user_repository.get_by_email(db, "found@example.com")
 
@@ -18,7 +18,7 @@ def test_get_by_email_returns_user_when_email_matches(db: Session) -> None:
 
 
 def test_get_by_email_does_not_return_user_for_different_email(db: Session) -> None:
-    user_repository.create(db, "a@example.com", "hashed_pw", "User A")
+    user_repository.create(db, "a@example.com", "User A", "hashed_pw")
 
     result = user_repository.get_by_email(db, "b@example.com")
 
@@ -26,7 +26,7 @@ def test_get_by_email_does_not_return_user_for_different_email(db: Session) -> N
 
 
 def test_create_returns_user_with_assigned_id(db: Session) -> None:
-    user = user_repository.create(db, "new@example.com", "hashed_pw", "New User")
+    user = user_repository.create(db, "new@example.com", "New User", "hashed_pw")
 
     assert user.id is not None
     assert isinstance(user.id, int)
@@ -34,7 +34,7 @@ def test_create_returns_user_with_assigned_id(db: Session) -> None:
 
 def test_create_stores_correct_fields(db: Session) -> None:
     user = user_repository.create(
-        db, "fields@example.com", "hashed_pw", "Fields User"
+        db, "fields@example.com", "Fields User", "hashed_pw"
     )
 
     assert user.email == "fields@example.com"
@@ -43,7 +43,7 @@ def test_create_stores_correct_fields(db: Session) -> None:
 
 
 def test_create_user_is_retrievable_after_creation(db: Session) -> None:
-    user_repository.create(db, "persist@example.com", "hashed_pw", "Persist User")
+    user_repository.create(db, "persist@example.com", "Persist User", "hashed_pw")
 
     fetched = user_repository.get_by_email(db, "persist@example.com")
 
@@ -52,6 +52,6 @@ def test_create_user_is_retrievable_after_creation(db: Session) -> None:
 
 
 def test_create_sets_created_at(db: Session) -> None:
-    user = user_repository.create(db, "time@example.com", "hashed_pw", "Time User")
+    user = user_repository.create(db, "time@example.com", "Time User", "hashed_pw")
 
     assert user.created_at is not None

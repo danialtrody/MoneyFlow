@@ -1,29 +1,31 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { login } from '../services/authService'
+import { login, loginWithGoogle } from '../services/authService'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/Toast'
+import GoogleAuthButton from '../components/GoogleAuthButton'
 import { TrendUpIcon, EyeIcon, EyeOffIcon, ArrowRightIcon } from '../components/Icons'
 
 const inputClass =
   'w-full bg-white/4 border border-white/8 rounded-xl px-4 py-3.5 text-white text-[14.5px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.09)]'
 
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+
 export default function LoginPage() {
   const { setUser } = useAuth()
   const navigate = useNavigate()
+  const { toasts, addToast, removeToast } = useToast()
+
+  // Password login state
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const { toasts, addToast, removeToast } = useToast()
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!email || !password) {
-      addToast('error', 'Please fill in all fields.')
-      return
-    }
+    if (!email || !password) { addToast('error', 'Please fill in all fields.'); return }
     setIsLoading(true)
     try {
       const userData = await login(email, password)
@@ -33,6 +35,16 @@ export default function LoginPage() {
       addToast('error', err.message || 'Invalid email or password.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function handleGoogleSuccess(accessToken) {
+    try {
+      const userData = await loginWithGoogle(accessToken)
+      setUser(userData)
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      addToast('error', err.message || 'Google sign-in failed.')
     }
   }
 
@@ -80,9 +92,8 @@ export default function LoginPage() {
             <p className="text-slate-400 text-[14.5px] leading-relaxed">Sign in to manage your finances</p>
           </div>
 
-          {/* Form */}
+          {/* Password form */}
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
-
             <div className="space-y-2">
               <label htmlFor="login-email" className="block text-[12.5px] font-medium text-slate-300 tracking-wide">
                 Email address
@@ -100,11 +111,9 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="login-password" className="block text-[12.5px] font-medium text-slate-300 tracking-wide">
-                  Password
-                </label>
-                </div>
+              <label htmlFor="login-password" className="block text-[12.5px] font-medium text-slate-300 tracking-wide">
+                Password
+              </label>
               <div className="relative">
                 <input
                   id="login-password"
@@ -145,6 +154,22 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Google sign-in */}
+          {googleClientId && (
+            <>
+              <div className="flex items-center gap-3 my-6">
+                <div className="flex-1 h-px bg-white/6" />
+                <span className="text-[11px] text-slate-600 tracking-[0.12em] uppercase">or</span>
+                <div className="flex-1 h-px bg-white/6" />
+              </div>
+
+              <GoogleAuthButton
+                onSuccess={handleGoogleSuccess}
+                onError={() => addToast('error', 'Google sign-in was cancelled.')}
+              />
+            </>
+          )}
 
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 h-px bg-white/6" />
