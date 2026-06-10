@@ -31,14 +31,32 @@ def register(db: Session, data: UserCreate) -> User:
     if existing:
         raise ValueError("Email already registered")
     hashed = pwd_context.hash(data.password)
-    return user_repository.create(db, data.email, hashed, data.full_name)
+    return user_repository.create(
+        db, email=data.email, full_name=data.full_name, hashed_password=hashed
+    )
 
 
 def authenticate(db: Session, email: str, password: str) -> User:
     user = user_repository.get_by_email(db, email)
-    if not user or not pwd_context.verify(password, user.hashed_password):
+    if not user or not user.hashed_password:
+        raise ValueError("Incorrect email or password")
+    if not pwd_context.verify(password, user.hashed_password):
         raise ValueError("Incorrect email or password")
     return user
+
+
+def get_or_create_from_google(
+    db: Session, google_id: str, email: str, full_name: str
+) -> User:
+    user = user_repository.get_by_google_id(db, google_id)
+    if user is not None:
+        return user
+    user = user_repository.get_by_email(db, email)
+    if user is not None:
+        return user_repository.set_google_id(db, user, google_id)
+    return user_repository.create(
+        db, email=email, full_name=full_name, google_id=google_id
+    )
 
 
 def update_profile(db: Session, user: User, data: UserUpdate) -> User:
@@ -47,6 +65,10 @@ def update_profile(db: Session, user: User, data: UserUpdate) -> User:
     if data.new_password is not None:
         if not data.current_password:
             raise ValueError("Current password is required to set a new password")
+        if not user.hashed_password:
+            raise ValueError(
+                "This account has no password — sign in with Google instead"
+            )
         if not pwd_context.verify(data.current_password, user.hashed_password):
             raise ValueError("Current password is incorrect")
     hashed = pwd_context.hash(data.new_password) if data.new_password else None

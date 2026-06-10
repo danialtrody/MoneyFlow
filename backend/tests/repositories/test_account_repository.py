@@ -7,7 +7,7 @@ from repositories import account_repository, user_repository
 
 
 def _create_user(db: Session, email: str = "user@example.com") -> int:
-    user = user_repository.create(db, email, "hashed_pw", "Test User")
+    user = user_repository.create(db, email, "Test User", "hashed_pw")
     return user.id
 
 

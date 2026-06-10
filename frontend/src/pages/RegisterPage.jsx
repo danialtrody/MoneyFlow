@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { register } from '../services/authService'
+import { register, loginWithGoogle } from '../services/authService'
+import { useAuth } from '../context/AuthContext'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/Toast'
+import GoogleAuthButton from '../components/GoogleAuthButton'
 import { TrendUpIcon, EyeIcon, EyeOffIcon, ArrowLeftIcon } from '../components/Icons'
 
 const inputClass =
   'w-full bg-white/4 border border-white/8 rounded-xl px-4 py-3.5 text-white text-[14.5px] placeholder:text-slate-600 outline-none transition-all duration-200 focus:border-blue-500/50 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.09)]'
 
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+
 export default function RegisterPage() {
+  const { setUser } = useAuth()
   const navigate = useNavigate()
   const timerRef = useRef(null)
 
@@ -50,6 +55,16 @@ export default function RegisterPage() {
       addToast('error', err.message || 'Registration failed. Please try again.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function handleGoogleSuccess(accessToken) {
+    try {
+      const userData = await loginWithGoogle(accessToken)
+      setUser(userData)
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      addToast('error', err.message || 'Google sign-up failed.')
     }
   }
 
@@ -97,7 +112,24 @@ export default function RegisterPage() {
             <p className="text-slate-400 text-[14.5px] leading-relaxed">Start tracking your finances today</p>
           </div>
 
-          {/* Form */}
+          {/* Google sign-up */}
+          {googleClientId && (
+            <>
+              <GoogleAuthButton
+                className="mb-6"
+                onSuccess={handleGoogleSuccess}
+                onError={() => addToast('error', 'Google sign-up was cancelled.')}
+              />
+
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px bg-white/6" />
+                <span className="text-[11px] text-slate-600 tracking-[0.12em] uppercase">or register with email</span>
+                <div className="flex-1 h-px bg-white/6" />
+              </div>
+            </>
+          )}
+
+          {/* Email/password form */}
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
 
             <div className="space-y-2">

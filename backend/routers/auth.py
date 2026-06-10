@@ -1,8 +1,7 @@
-import os
-
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from cookie_utils import set_auth_cookie
 from database import get_db
 from dependencies import get_current_user
 from models.user import User
@@ -10,10 +9,6 @@ from schemas.user import LoginRequest, UserCreate, UserResponse, UserUpdate
 from services import user_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-_COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
-_COOKIE_SAMESITE: str = "none" if _COOKIE_SECURE else "lax"
-_COOKIE_MAX_AGE: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")) * 60
 
 
 @router.post(
@@ -47,14 +42,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = user_service.create_access_token(subject=user.email)
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite=_COOKIE_SAMESITE,
-        secure=_COOKIE_SECURE,
-        max_age=_COOKIE_MAX_AGE,
-    )
+    set_auth_cookie(response, token)
     return UserResponse.model_validate(user)
 
 

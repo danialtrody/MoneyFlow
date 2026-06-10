@@ -11,7 +11,7 @@ from services import import_service
 
 
 def _make_user(db: Session, email: str = "user@example.com") -> int:
-    return user_repository.create(db, email, "hashed_pw", "Test User").id
+    return user_repository.create(db, email, "Test User", "hashed_pw").id
 
 
 def _make_account(db: Session, user_id: int, balance: float = 0.0) -> object:
