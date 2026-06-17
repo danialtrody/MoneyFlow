@@ -13,7 +13,7 @@ from services import user_service
 
 router = APIRouter(tags=["auth"])
 
-_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+_GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 
 
 @router.post("/auth/google", response_model=UserResponse)
@@ -23,8 +23,7 @@ def google_login(
     db: Session = Depends(get_db),
 ) -> UserResponse:
     req = urllib.request.Request(
-        _GOOGLE_USERINFO_URL,
-        headers={"Authorization": f"Bearer {data.access_token}"},
+        f"{_GOOGLE_TOKENINFO_URL}?id_token={data.credential}",
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as res:
@@ -32,17 +31,21 @@ def google_login(
     except urllib.error.HTTPError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired Google token",
+            detail="Invalid or expired Google credential",
         )
     except (urllib.error.URLError, OSError, TimeoutError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not verify Google token",
+            detail="Could not verify Google credential",
         )
 
     google_id: str = info.get("sub", "")
     email: str = info.get("email", "")
-    full_name: str = info.get("name", "") or (email.split("@")[0] if email else "")
+    full_name: str = (
+        info.get("name", "")
+        or info.get("given_name", "")
+        or (email.split("@")[0] if email else "")
+    )
 
     if not email or not google_id:
         raise HTTPException(
