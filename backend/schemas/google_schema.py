@@ -2,4 +2,4 @@ from pydantic import BaseModel
 
 
 class GoogleAuthRequest(BaseModel):
-    credential: str
+    access_token: str
