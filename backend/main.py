@@ -1,8 +1,7 @@
 import os
-from typing import Awaitable, Callable
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,15 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
-
-
-@app.middleware("http")
-async def add_coop_header(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    response = await call_next(request)
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
-    return response
 
 
 @app.exception_handler(RequestValidationError)
